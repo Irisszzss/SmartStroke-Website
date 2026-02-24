@@ -43,6 +43,13 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess }) {
   const [baseScale, setBaseScale] = useState(1);
   const lastTouchDistance = useRef(null);
 
+  // --- RECENTER LOGIC ---
+  const handleRecenter = () => {
+    const { yaw, pitch } = getYawPitch(data.r, data.i, data.j, data.k);
+    centerPos.current = { yaw, pitch };
+    triggerToast("Cursor Recentered");
+  };
+
   // --- RESPONSIVE LOGIC (ENABLED FOR ALL) ---
   useEffect(() => {
     const handleResize = () => {
@@ -56,7 +63,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess }) {
       const scaleW = availableWidth / 1400;
       const scaleH = availableHeight / 700; 
       
-      // We set baseScale to fit the screen, but users can now zoom freely on top of this
       setBaseScale(Math.min(scaleW, scaleH, 1.2)); 
     };
     window.addEventListener('resize', handleResize);
@@ -82,7 +88,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess }) {
 
   // --- MOUSE HANDLERS ---
   const handleMouseDown = (e) => {
-    // Left click or middle click for panning
     if (e.button === 0 || e.button === 1 || e.shiftKey) { 
       setIsPanning(true);
       setLastMousePos({ x: e.clientX, y: e.clientY });
@@ -348,7 +353,10 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess }) {
           {!isConnected ? (
             <button onClick={connectBLE} className="whitespace-nowrap p-2 lg:p-2.5 rounded-xl bg-orange-500 text-white font-bold cursor-pointer text-xs lg:text-sm">Connect Pen</button>
           ) : (
-            <button onClick={disconnectBLE} className="whitespace-nowrap p-2 lg:p-2.5 rounded-xl border border-slate-200 bg-white text-slate-500 font-bold cursor-pointer text-xs lg:text-sm">Disconnect</button>
+            <>
+              <button onClick={disconnectBLE} className="whitespace-nowrap p-2 lg:p-2.5 rounded-xl border border-slate-200 bg-white text-slate-500 font-bold cursor-pointer text-xs lg:text-sm">Disconnect</button>
+              <button onClick={handleRecenter} className="whitespace-nowrap p-2 lg:p-2.5 rounded-xl bg-blue-100 text-blue-700 font-bold cursor-pointer text-xs lg:text-sm">Recenter Cursor</button>
+            </>
           )}
           <div className="flex lg:flex-col items-center gap-2">
             <div className="flex gap-2 justify-center">

@@ -3,8 +3,7 @@
 #include "DW1000Ranging.h"
 #include "DW1000.h"
 
-// 💡 Set a unique address per anchor
-// Example:
+// Unique address per anchor
 // Anchor 1: "86:17:5B:D5:A9:9A:E2:9C"
 // Anchor 2: "85:16:5B:D5:A9:9A:E3:9C"
 // Anchor 2: "84:15:5B:D5:A9:9A:E3:9C"

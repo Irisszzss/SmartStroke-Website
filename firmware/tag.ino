@@ -15,7 +15,7 @@
 #define PIN_RST 27
 #define PIN_IRQ 34
 
-// BLE UUIDs (Generated unique ones)
+// BLE UUIDs
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
@@ -29,7 +29,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) { deviceConnected = true; };
     void onDisconnect(BLEServer* pServer) { 
       deviceConnected = false; 
-      BLEDevice::startAdvertising(); // Restart advertising so we can reconnect
+      BLEDevice::startAdvertising(); // Restart advertising to reconnect
     }
 };
 
@@ -79,7 +79,7 @@ void loop() {
   }
 }
 
-/* --- NEW WebSocket Server Event Handler ---
+/* --- WebSocket Server Event Handler if using wifi ---
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
   switch (type) {
     case WStype_DISCONNECTED:
