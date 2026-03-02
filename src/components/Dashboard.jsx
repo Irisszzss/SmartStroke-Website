@@ -8,9 +8,12 @@ export default function Dashboard({ user, onSelectClass, triggerToast }) {
   const [inputValue, setInputValue] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+
+
   const loadClasses = async () => {
     try {
       setLoading(true);
+      console.log("Fetching classes for role:", user.role); // Check this in the browser console
       const res = await api.getClasses(user.userId, user.role);
       setClasses(res.data);
     } catch (err) {

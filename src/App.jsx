@@ -4,6 +4,10 @@ import Dashboard from './components/Dashboard';
 import ClassDetail from './components/ClassDetail';
 import Profile from './components/Profile';
 import IMUCanvas from './page/IMUCanvas';
+import { io } from 'socket.io-client';
+
+// Initialize socket outside the component to prevent multiple connections on re-render
+const socket = io('https://smartstroke-api.onrender.com');
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -20,13 +24,26 @@ export default function App() {
     }, 3000);
   }, []);
 
+  const handleForceExit = useCallback(() => {
+    setActiveView('detail');
+    triggerToast("Session ended by teacher", "info");
+  }, [triggerToast]);
+
+  // ✅ SOCKET ROOM LOGIC
   useEffect(() => {
-    const savedUser = localStorage.getItem('smartstroke_user');
+    if (user && selectedClass?._id && activeView === 'whiteboard') {
+      socket.emit('join-session', selectedClass._id);
+    }
+  }, [user, selectedClass, activeView]);
+
+  // ✅ FIXED: Changed to sessionStorage to prevent automatic login on new sessions
+  useEffect(() => {
+    const savedUser = sessionStorage.getItem('smartstroke_user');
     if (savedUser) {
       try { 
         setUser(JSON.parse(savedUser)); 
       } catch (e) { 
-        localStorage.removeItem('smartstroke_user'); 
+        sessionStorage.removeItem('smartstroke_user'); 
       }
     }
     setLoading(false);
@@ -34,13 +51,15 @@ export default function App() {
 
   const handleLogin = (userData) => {
     setUser(userData);
-    localStorage.setItem('smartstroke_user', JSON.stringify(userData));
+    // ✅ FIXED: Using sessionStorage
+    sessionStorage.setItem('smartstroke_user', JSON.stringify(userData));
     triggerToast(`Welcome back, ${userData.name}!`, "success");
   };
 
   const handleLogout = () => {
     setUser(null);
-    localStorage.removeItem('smartstroke_user');
+    // ✅ FIXED: Using sessionStorage
+    sessionStorage.removeItem('smartstroke_user');
     setActiveView('dashboard');
     triggerToast("Logged out successfully", "info");
   };
@@ -48,19 +67,27 @@ export default function App() {
   const handleUpdateUser = (updatedData) => {
     const newUser = { ...user, ...updatedData };
     setUser(newUser);
-    localStorage.setItem('smartstroke_user', JSON.stringify(newUser));
+    // ✅ FIXED: Using sessionStorage
+    sessionStorage.setItem('smartstroke_user', JSON.stringify(newUser));
   };
 
   const handleSaveSuccess = (newFileData) => {
-    if (selectedClass) {
-      const updatedClass = {
-        ...selectedClass,
-        files: [...(selectedClass.files || []), newFileData]
-      };
-      setSelectedClass(updatedClass);
+    // If newFileData is null or undefined, it's just an exit/force-exit
+    if (newFileData) {
+      if (selectedClass) {
+        const updatedClass = {
+          ...selectedClass,
+          files: [...(selectedClass.files || []), newFileData]
+        };
+        setSelectedClass(updatedClass);
+      }
+      triggerToast("Note successfully saved!", "success");
+    } else {
+      // If no data, the session just ended (teacher left or student clicked exit)
+      triggerToast("Session ended", "info");
     }
+    
     setActiveView('detail');
-    triggerToast("Note successfully archived!", "success");
   };
 
   const getGreeting = () => {
@@ -80,10 +107,9 @@ export default function App() {
     : null;
 
   return (
-    // Inside App.js return statement
     <div className="h-[100dvh] bg-[#FDFCF5] font-['Poppins'] text-slate-800 flex flex-col overflow-hidden">
       
-      {/* ✅ FIXED: Responsive Toast for Mobile */}
+      {/* Toast Notification */}
       {toast.show && (
         <div className={`fixed top-20 md:top-24 left-1/2 -translate-x-1/2 z-[100] 
           w-[92%] md:w-auto px-4 md:px-6 py-3 rounded-2xl shadow-2xl font-bold 
@@ -104,6 +130,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Navigation */}
       <nav className="bg-[#001BB7] p-3 md:p-4 text-white flex justify-between items-center shadow-xl z-50 shrink-0 select-none">
         <div className="flex items-center gap-2 md:gap-3 cursor-pointer group outline-none" onClick={() => setActiveView('dashboard')}>
           <div className="bg-orange-500 w-8 h-8 md:w-9 md:h-9 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform shrink-0">
@@ -134,59 +161,65 @@ export default function App() {
         </div>
       </nav>
 
+      {/* Main Content Area */}
       <main className={`flex-1 flex flex-col ${
         activeView === 'whiteboard' 
           ? 'p-0 overflow-hidden' 
-          : 'p-4 md:p-8 overflow-y-auto overflow-x-hidden [@media(min-width:1440px)]:overflow-y-visible'
+          : 'p-4 md:p-8 overflow-y-auto overflow-x-hidden'
       }`}>
-        <div className={`${activeView === 'whiteboard' ? 'flex-1 w-full' : 'flex-initial max-w-7xl mx-auto w-full'}`}>
+        <div className={`${activeView === 'whiteboard' ? 'flex-1 w-full h-full' : 'flex-initial max-w-7xl mx-auto w-full'}`}>
+            
             {activeView === 'dashboard' && (
-            <Dashboard 
+              <Dashboard 
                 user={user} 
                 onSelectClass={(cls) => { setSelectedClass(cls); setActiveView('detail'); }} 
                 triggerToast={triggerToast}
-            />
+              />
             )}
             
             {activeView === 'detail' && (
-            <ClassDetail 
+              <ClassDetail 
                 user={user} 
                 classroom={selectedClass} 
                 onBack={() => setActiveView('dashboard')}
                 onStartSession={() => setActiveView('whiteboard')}
                 triggerToast={triggerToast}
-            />
+              />
             )}
 
             {activeView === 'profile' && (
-            <Profile 
+              <Profile 
                 user={user} 
                 onUpdateUser={handleUpdateUser} 
                 onBack={() => setActiveView('dashboard')} 
                 triggerToast={triggerToast} 
-            />
+              />
             )}
 
             {activeView === 'whiteboard' && (
-            <div className="flex-1 flex flex-col h-full w-full bg-white overflow-hidden relative">
+              <div className="flex-1 flex flex-col h-full w-full bg-white overflow-hidden relative">
+                {/* Back Button */}
                 <button 
-                onClick={() => setActiveView('detail')} 
-                className="fixed bottom-6 right-6 lg:absolute lg:top-6 lg:left-10 lg:bottom-auto lg:right-auto z-[60] 
-                bg-white/90 backdrop-blur shadow-2xl border-2 border-[#001BB7]/10 px-5 py-3 rounded-2xl flex items-center 
-                gap-2 text-[#001BB7] font-black text-xs uppercase tracking-[0.2em] transition-all duration-300 active:scale-90
-                select-none outline-none cursor-pointer hover:bg-white hover:scale-105 hover:shadow-blue-200/50
-                 hover:border-[#001BB7]/30">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-                Exit Session
+                  onClick={() => setActiveView('detail')} 
+                  className="fixed bottom-6 right-6 lg:absolute lg:top-6 lg:left-10 lg:bottom-auto lg:right-auto z-[60] 
+                  bg-white/90 backdrop-blur shadow-2xl border-2 border-[#001BB7]/10 px-5 py-3 rounded-2xl flex items-center 
+                  gap-2 text-[#001BB7] font-black text-xs uppercase tracking-[0.2em] transition-all duration-300 active:scale-90
+                  select-none outline-none cursor-pointer hover:bg-white hover:scale-105 hover:shadow-blue-200/50 hover:border-[#001BB7]/30">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                  Exit Session
                 </button>
                 
+                {/* Whiteboard Canvas */}
                 <div className="w-full h-full">
                     <IMUCanvas 
                       classId={selectedClass?._id} 
-                      onSaveSuccess={handleSaveSuccess} 
+                      onSaveSuccess={handleSaveSuccess}
+                      onForceExit={handleForceExit}
+                      role={user.role}
+                      socket={socket}
                     />
                 </div>
-            </div>
+              </div>
             )}
         </div>
       </main>

@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../utils/api';
 import { QRCodeCanvas } from 'qrcode.react';
+import { io } from 'socket.io-client'; // ✅ Import Socket.io client
+
+// Initialize socket for status checking
+const socket = io('https://smartstroke-api.onrender.com');
 
 export default function ClassDetail({ user, classroom, onBack, onStartSession, triggerToast }) {
   const [students, setStudents] = useState([]);
@@ -8,6 +12,9 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
   const [copied, setCopied] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   
+  // ✅ Live Stream State
+  const [isLive, setIsLive] = useState(false);
+
   // MODAL STATES
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -19,13 +26,33 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
   
   const qrRef = useRef();
 
+  // ✅ Socket Logic: Monitor Stream Status
+  useEffect(() => {
+    if (!classroom?._id) return;
+
+    // Join the room to receive status updates
+    socket.emit('join-session', classroom._id);
+
+    // Initial check for stream status
+    socket.emit('check-stream-status', classroom._id);
+
+    // Listen for status changes
+    socket.on('stream-status', (status) => {
+      setIsLive(status.isLive);
+    });
+
+    return () => {
+      socket.off('stream-status');
+    };
+  }, [classroom?._id]);
+
   useEffect(() => {
     if (classroom?.files) setLocalFiles(classroom.files);
   }, [classroom]);
 
   useEffect(() => {
     if (user?.role === 'teacher') loadStudents();
-  }, []);
+  }, [user]);
 
   const loadStudents = async () => {
     try {
@@ -63,13 +90,17 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
   };
 
   const sortedFiles = useMemo(() => {
-    return [...localFiles].sort((a, b) => {
+    // 1. Filter out any null or undefined entries to prevent "reading properties of null"
+    const validFiles = localFiles.filter(file => file !== null && typeof file === 'object');
+
+    return validFiles.sort((a, b) => {
       let comparison = 0;
       if (sortBy === 'name') {
         comparison = (a.filename || "").localeCompare(b.filename || "");
       } else {
-        const dateA = new Date(a.uploadDate || a.createdAt || 0);
-        const dateB = new Date(b.uploadDate || b.createdAt || 0);
+        // 2. Use a fallback date (0) if the property is missing
+        const dateA = new Date(a.uploadDate || a.createdAt || 0).getTime();
+        const dateB = new Date(b.uploadDate || b.createdAt || 0).getTime();
         comparison = dateA - dateB;
       }
       return sortOrder === 'desc' ? -comparison : comparison;
@@ -208,10 +239,27 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
                 )}
               </div>
           </div>
+
+          {/* TEACHER BUTTON: START SESSION */}
           {user?.role === 'teacher' && (
               <button onClick={onStartSession} className="w-full md:w-auto bg-[#001BB7] text-white px-10 py-6 rounded-[28px] font-black shadow-2xl hover:bg-[#0046FF] transition-all flex items-center justify-center gap-3 uppercase text-xs tracking-[0.2em]">
                   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15.5 2H8.6c-.4 0-.8.2-1.1.5L4.5 5.5c-.3.3-.5.7-.5 1.1V21c0 .6.4 1 1 1h14c.6 0 1-.4 1-1V6.5c0-.4-.2-.8-.5-1.1l-3-3c-.3-.3-.7-.5-1.1-.5z"/><path d="M15 2v4c0 .6.4 1 1 1h4"/><path d="M8 13h8"/><path d="M8 17h8"/><path d="M10 9h4"/></svg>
                   Start Whiteboard Session
+              </button>
+          )}
+
+          {/* STUDENT BUTTON: JOIN LIVE STREAM - ✅ Disabled logic added */}
+          {user?.role === 'student' && (
+              <button 
+                disabled={!isLive}
+                onClick={onStartSession} 
+                className={`w-full md:w-auto px-10 py-6 rounded-[28px] font-black shadow-2xl transition-all flex items-center justify-center gap-3 uppercase text-xs tracking-[0.2em] 
+                  ${isLive 
+                    ? 'bg-[#FF8040] text-white hover:bg-[#e66a2e] animate-pulse cursor-pointer' 
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 shadow-none opacity-60'}`}
+              >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
+                  {isLive ? 'Join Session' : 'Classroom Offline'}
               </button>
           )}
         </div>
@@ -260,7 +308,6 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
                         <h3 className="font-black text-slate-800 uppercase tracking-[0.3em] text-[10px]">Enrolled Students</h3>
                         <span className="text-[10px] font-black text-slate-400">{students?.length || 0} TOTAL</span>
                     </div>
-                    {/* ✅ FIXED: Added max-height and overflow-y-auto for mobile scrollability */}
                     <div className="p-6 space-y-3 max-h-[300px] sm:max-h-[500px] overflow-y-auto no-scrollbar flex-1">
                         {students.map((s) => {
                             const studentAvatar = s.profilePicture ? (s.profilePicture.startsWith('http') ? s.profilePicture : `https://smartstroke-api.onrender.com/${s.profilePicture}`) : null;
@@ -285,89 +332,50 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
         </div>
       </div>
 
-      {/* CONFIRMATION MODALS AND QR... (Keep previous implementation) */}
-      {/* (Truncated for brevity, but same as before) */}
       {showLeaveConfirm && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
-    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => !isProcessing && setShowLeaveConfirm(false)} />
-    
-    {/* ✅ Added transition, duration, and a very light hover scale to the card */}
-    <div className="relative bg-white p-10 rounded-[48px] shadow-2xl w-full max-w-md text-center border border-white animate-in zoom-in-95 transition-all duration-500 hover:scale-[1.01] hover:shadow-red-900/5">
-        
-        <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mx-auto mb-6 text-red-500 shadow-inner transition-transform duration-700 hover:rotate-12">
-            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => !isProcessing && setShowLeaveConfirm(false)} />
+          <div className="relative bg-white p-10 rounded-[48px] shadow-2xl w-full max-w-md text-center border border-white animate-in zoom-in-95 transition-all duration-500 hover:scale-[1.01] hover:shadow-red-900/5">
+              <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mx-auto mb-6 text-red-500 shadow-inner transition-transform duration-700 hover:rotate-12">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 mb-2">Leave Classroom?</h3>
+              <p className="text-slate-500 text-sm mb-10 leading-relaxed font-medium">
+                  You will no longer have access to the archives for <span className="font-bold text-slate-800">"{classroom.name}"</span>.
+              </p>
+              <div className="flex flex-col gap-3">
+                  <button disabled={isProcessing} onClick={handleConfirmLeave} className="w-full bg-red-500 text-white py-5 rounded-[24px] font-black shadow-xl shadow-red-100 hover:bg-red-600 hover:shadow-red-200 transition-all active:scale-95 uppercase text-xs tracking-widest disabled:opacity-50">
+                      {isProcessing ? "Leaving..." : "Confirm Leave"}
+                  </button>
+                  <button disabled={isProcessing} onClick={() => setShowLeaveConfirm(false)} className="w-full bg-slate-50 text-slate-400 py-5 rounded-[24px] font-black hover:bg-slate-100 hover:text-slate-600 transition-all active:scale-95 uppercase text-xs tracking-widest">
+                      Cancel
+                  </button>
+              </div>
+          </div>
         </div>
-        
-        <h3 className="text-2xl font-black text-slate-900 mb-2">Leave Classroom?</h3>
-        <p className="text-slate-500 text-sm mb-10 leading-relaxed font-medium">
-            You will no longer have access to the archives for <span className="font-bold text-slate-800">"{classroom.name}"</span>.
-        </p>
-        
-        <div className="flex flex-col gap-3">
-            {/* ✅ Added hover:bg-red-600 and active:scale-95 for a "click" feel */}
-            <button 
-                disabled={isProcessing} 
-                onClick={handleConfirmLeave} 
-                className="w-full bg-red-500 text-white py-5 rounded-[24px] font-black shadow-xl shadow-red-100 hover:bg-red-600 hover:shadow-red-200 transition-all active:scale-95 uppercase text-xs tracking-widest disabled:opacity-50"
-            >
-                {isProcessing ? "Leaving..." : "Confirm Leave"}
-            </button>
-            
-            {/* ✅ Added hover:bg-slate-100 and a subtle text color shift for the cancel button */}
-            <button 
-                disabled={isProcessing} 
-                onClick={() => setShowLeaveConfirm(false)} 
-                className="w-full bg-slate-50 text-slate-400 py-5 rounded-[24px] font-black hover:bg-slate-100 hover:text-slate-600 transition-all active:scale-95 uppercase text-xs tracking-widest"
-            >
-                Cancel
-            </button>
-        </div>
-    </div>
-</div>
       )}
 
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
-    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => !isProcessing && setShowDeleteConfirm(false)} />
-    
-    {/* ✅ Added transition and subtle hover scale for depth */}
-    <div className="relative bg-white p-10 rounded-[48px] shadow-2xl w-full max-w-md text-center border border-white animate-in zoom-in-95 transition-all duration-500 hover:scale-[1.01] hover:shadow-red-900/10">
-          
-          {/* ✅ Added hover:shake effect to the trash icon to emphasize danger */}
-          <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mx-auto mb-6 text-red-500 shadow-inner transition-transform duration-300 group-hover:rotate-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => !isProcessing && setShowDeleteConfirm(false)} />
+          <div className="relative bg-white p-10 rounded-[48px] shadow-2xl w-full max-w-md text-center border border-white animate-in zoom-in-95 transition-all duration-500 hover:scale-[1.01] hover:shadow-red-900/10">
+              <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mx-auto mb-6 text-red-500 shadow-inner transition-transform duration-300 group-hover:rotate-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Delete Classroom?</h3>
+              <p className="text-slate-500 text-sm mb-10 leading-relaxed font-medium">
+                  This will permanently remove the class and all notes. <span className="text-red-500 font-bold uppercase text-[10px] block mt-1">This action cannot be undone.</span>
+              </p>
+              <div className="flex flex-col gap-3">
+                  <button disabled={isProcessing} onClick={handleConfirmDelete} className="w-full bg-red-500 text-white py-5 rounded-[24px] font-black shadow-xl shadow-red-100 hover:bg-red-600 hover:shadow-red-200 transition-all active:scale-95 uppercase text-xs tracking-widest disabled:opacity-50 flex items-center justify-center min-h-[60px]">
+                      {isProcessing ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Confirm Permanent Delete"}
+                  </button>
+                  <button disabled={isProcessing} onClick={() => setShowDeleteConfirm(false)} className="w-full bg-slate-50 text-slate-400 py-5 rounded-[24px] font-black hover:bg-slate-100 hover:text-slate-600 transition-all active:scale-95 uppercase text-xs tracking-widest">
+                      Cancel
+                  </button>
+              </div>
           </div>
-          
-          <h3 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Delete Classroom?</h3>
-          <p className="text-slate-500 text-sm mb-10 leading-relaxed font-medium">
-              This will permanently remove the class and all notes. <span className="text-red-500 font-bold uppercase text-[10px] block mt-1">This action cannot be undone.</span>
-          </p>
-          
-          <div className="flex flex-col gap-3">
-              {/* ✅ Primary Action: Enhanced red hover and active scale */}
-              <button 
-                  disabled={isProcessing} 
-                  onClick={handleConfirmDelete} 
-                  className="w-full bg-red-500 text-white py-5 rounded-[24px] font-black shadow-xl shadow-red-100 hover:bg-red-600 hover:shadow-red-200 transition-all active:scale-95 uppercase text-xs tracking-widest disabled:opacity-50 flex items-center justify-center min-h-[60px]"
-              >
-                  {isProcessing ? (
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                      "Confirm Permanent Delete"
-                  )}
-              </button>
-              
-              {/* ✅ Cancel Button: Subtle slate hover */}
-              <button 
-                  disabled={isProcessing} 
-                  onClick={() => setShowDeleteConfirm(false)} 
-                  className="w-full bg-slate-50 text-slate-400 py-5 rounded-[24px] font-black hover:bg-slate-100 hover:text-slate-600 transition-all active:scale-95 uppercase text-xs tracking-widest"
-              >
-                  Cancel
-              </button>
-          </div>
-      </div>
-  </div>
+        </div>
       )}
 
       {showQRModal && (
