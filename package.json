@@ -16,6 +16,7 @@
     "ahrs": "^1.3.3",
     "axios": "^1.13.5",
     "jspdf": "^3.0.4",
+    "nodemailer": "^8.0.1",
     "qrcode.react": "^4.2.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
