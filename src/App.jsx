@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import ClassDetail from './components/ClassDetail';
 import Profile from './components/Profile';
 import IMUCanvas from './page/IMUCanvas';
+import SSLogo from './assets/SS_Logo.png';
 import { io } from 'socket.io-client';
 
 const socket = io('https://smartstroke-api.onrender.com');
@@ -128,7 +129,13 @@ export default function App() {
       <nav className="bg-[#001BB7] p-3 md:p-4 text-white flex justify-between items-center shadow-xl z-50 shrink-0 select-none">
         <div className="flex items-center gap-2 md:gap-3 cursor-pointer group outline-none" onClick={() => setActiveView('dashboard')}>
           <div className="bg-orange-500 w-8 h-8 md:w-9 md:h-9 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 20 20"/></svg>
+              <img 
+                src={SSLogo} 
+                alt="SmartStroke Logo" 
+                width="50" 
+                height="50" 
+                style={{ filter: 'brightness(0) invert(1)' }} 
+              />
           </div>
           <h1 className="text-sm md:text-xl font-black tracking-tight uppercase whitespace-nowrap">SmartStroke</h1>
         </div>

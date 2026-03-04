@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { api } from '../utils/api';
+import SSLogo from '../assets/SS_Logo.png';
 
 export default function Auth({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -114,7 +115,13 @@ export default function Auth({ onLogin }) {
       <div className="relative z-10 flex flex-col items-center w-full max-w-lg">
         <div className="m-10 text-center animate-in fade-in slide-in-from-top-8 duration-1000">
           <div className="bg-[#001BB7] w-20 h-20 rounded-[28px] flex items-center justify-center mx-auto mb-6 shadow-2xl transition-transform hover:scale-105">
-            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 20 20"/></svg>
+            <img 
+              src={SSLogo} 
+              alt="SmartStroke Logo" 
+              width="100" 
+              height="100" 
+              style={{ filter: 'brightness(0) invert(1)' }}
+            />
           </div>
           <h1 className="text-5xl font-black text-slate-900 tracking-tighter leading-none">SmartStroke</h1>
           <p className="text-slate-500 font-bold text-[12 px] uppercase tracking-[0.4em] mt-3 opacity-70">Where Ideas Leave a Trace</p>
