@@ -20,7 +20,7 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const handleAvatarClick = () => {
-    if (!isEditing) return; // ✅ Only clickable in Edit Mode
+    if (!isEditing) return;
     fileInputRef.current.click();
   };
 
@@ -119,7 +119,7 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
         <div className="flex items-center gap-6 mb-10 border-b border-slate-100 pb-10">
 
           <div className="relative group">
-            {/* ✅ Interactive Avatar Container */}
+            {/* Interactive Avatar Container */}
             <div className={`relative ${isEditing ? 'cursor-pointer' : 'cursor-default'}`} onClick={handleAvatarClick}>
               <div className={`w-24 h-24 rounded-[32px] bg-[#001BB7] flex items-center justify-center text-white text-4xl font-black uppercase shadow-xl overflow-hidden transition-all duration-500 ${isEditing ? 'ring-4 ring-[#001BB7]/20 scale-105 shadow-blue-200' : ''}`}>
                 {avatarUrl ? (
@@ -128,7 +128,7 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
                   user.firstName?.charAt(0) || user.username?.charAt(0)
                 )}
 
-                {/* ✅ Camera Icon Overlay - Visible only in Edit Mode */}
+                {/* Camera Icon Overlay - Visible only in Edit Mode */}
                 {isEditing && (
                   <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-100 transition-opacity">
                     {uploading ? (
@@ -144,7 +144,6 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
               </div>
             </div>
 
-            {/* ✅ REMOVE AVATAR BUTTON (Always shows if image exists, regardless of mode) */}
             {user.profilePicture && isEditing && (
               <button
                 type="button"

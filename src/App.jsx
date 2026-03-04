@@ -6,7 +6,6 @@ import Profile from './components/Profile';
 import IMUCanvas from './page/IMUCanvas';
 import { io } from 'socket.io-client';
 
-// Initialize socket outside the component to prevent multiple connections on re-render
 const socket = io('https://smartstroke-api.onrender.com');
 
 export default function App() {
@@ -29,14 +28,12 @@ export default function App() {
     triggerToast("Session ended by teacher", "info");
   }, [triggerToast]);
 
-  // ✅ SOCKET ROOM LOGIC
   useEffect(() => {
     if (user && selectedClass?._id && activeView === 'whiteboard') {
       socket.emit('join-session', selectedClass._id);
     }
   }, [user, selectedClass, activeView]);
 
-  // ✅ FIXED: Changed to sessionStorage to prevent automatic login on new sessions
   useEffect(() => {
     const savedUser = sessionStorage.getItem('smartstroke_user');
     if (savedUser) {
@@ -51,14 +48,12 @@ export default function App() {
 
   const handleLogin = (userData) => {
     setUser(userData);
-    // ✅ FIXED: Using sessionStorage
     sessionStorage.setItem('smartstroke_user', JSON.stringify(userData));
     triggerToast(`Welcome back, ${userData.name}!`, "success");
   };
 
   const handleLogout = () => {
     setUser(null);
-    // ✅ FIXED: Using sessionStorage
     sessionStorage.removeItem('smartstroke_user');
     setActiveView('dashboard');
     triggerToast("Logged out successfully", "info");
@@ -67,7 +62,6 @@ export default function App() {
   const handleUpdateUser = (updatedData) => {
     const newUser = { ...user, ...updatedData };
     setUser(newUser);
-    // ✅ FIXED: Using sessionStorage
     sessionStorage.setItem('smartstroke_user', JSON.stringify(newUser));
   };
 

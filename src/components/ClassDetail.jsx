@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../utils/api';
 import { QRCodeCanvas } from 'qrcode.react';
-import { io } from 'socket.io-client'; // ✅ Import Socket.io client
+import { io } from 'socket.io-client';
 
-// Initialize socket for status checking
 const socket = io('https://smartstroke-api.onrender.com');
 
 export default function ClassDetail({ user, classroom, onBack, onStartSession, triggerToast }) {
@@ -12,7 +11,7 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
   const [copied, setCopied] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   
-  // ✅ Live Stream State
+  // Live Stream State
   const [isLive, setIsLive] = useState(false);
 
   // MODAL STATES
@@ -26,7 +25,6 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
   
   const qrRef = useRef();
 
-  // ✅ Socket Logic: Monitor Stream Status
   useEffect(() => {
     if (!classroom?._id) return;
 
@@ -248,7 +246,7 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
               </button>
           )}
 
-          {/* STUDENT BUTTON: JOIN LIVE STREAM - ✅ Disabled logic added */}
+          {/* STUDENT BUTTON: JOIN LIVE STREAM */}
           {user?.role === 'student' && (
               <button 
                 disabled={!isLive}

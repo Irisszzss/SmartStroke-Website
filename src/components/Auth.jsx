@@ -18,10 +18,10 @@ export default function Auth({ onLogin }) {
   });
   const [error, setError] = useState('');
 
-  // ✅ Function to handle mode switching and clear fields
+  // Function to handle mode switching and clear fields
   const handleToggleMode = () => {
     setIsLogin(!isLogin);
-    setError(''); // Clear error on switch
+    setError('');
     setFormData({
       username: '', 
       email: '',
@@ -64,7 +64,6 @@ export default function Auth({ onLogin }) {
 
     setIsLoading(true);
     try {
-      // ✅ Removed .toLowerCase() to allow Case Sensitivity
       const response = isLogin 
         ? await api.login(formData.username, formData.password)
         : await api.register({

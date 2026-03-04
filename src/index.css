@@ -11,7 +11,6 @@ body {
          transition-colors duration-200 focus:outline-none focus:ring-2 cursor-pointer;
 }
 
-/* For Chrome, Safari, and newer versions of Edge (WebKit) */
 input::-webkit-contacts-auto-fill-button, 
 input::-credentials-auto-fill-button {
   visibility: hidden;
@@ -20,7 +19,6 @@ input::-credentials-auto-fill-button {
   right: 0;
 }
 
-/* Specifically for hidding the eye icon in Microsoft Edge and IE */
 input::-ms-reveal,
 input::-ms-clear {
   display: none;

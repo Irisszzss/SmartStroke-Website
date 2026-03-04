@@ -13,7 +13,7 @@ export default function Dashboard({ user, onSelectClass, triggerToast }) {
   const loadClasses = async () => {
     try {
       setLoading(true);
-      console.log("Fetching classes for role:", user.role); // Check this in the browser console
+      //console.log("Fetching classes for role:", user.role);
       const res = await api.getClasses(user.userId, user.role);
       setClasses(res.data);
     } catch (err) {
@@ -117,7 +117,7 @@ export default function Dashboard({ user, onSelectClass, triggerToast }) {
         )}
       </div>
 
-      {/* Modern Modal - No Emojis */}
+      {/* Modern Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 z-[100] animate-in fade-in duration-300">
             <div className="bg-white p-10 rounded-[48px] w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-500 border border-white">
@@ -152,7 +152,6 @@ export default function Dashboard({ user, onSelectClass, triggerToast }) {
                 <button 
                   onClick={handleAction} 
                   disabled={isSubmitting}
-                  /* ✅ Added flex items-center justify-center here */
                   className="flex-1 py-4 bg-[#001BB7] text-white rounded-[20px] font-black hover:bg-[#0046FF] shadow-xl shadow-blue-100 transition-all uppercase text-xs tracking-[0.2em] active:scale-95 disabled:opacity-50 flex items-center justify-center min-h-[56px]"
                 >
                   {isSubmitting ? (
