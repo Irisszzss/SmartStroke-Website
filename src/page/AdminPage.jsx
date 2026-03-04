@@ -143,7 +143,7 @@ const AdminPage = ({ triggerToast }) => {
                                     <tr key={teacher.email} className="hover:bg-slate-50/50 transition-colors group">
                                         <td className="px-8 py-6">
                                             <p className="font-black text-slate-800 uppercase text-xs">{teacher.firstName} {teacher.surname}</p>
-                                            <span className="text-[9px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-black uppercase tracking-widest">Teacher Candidate</span>
+                                            <span className="text-[9px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-black uppercase tracking-widest">Pending Approval</span>
                                         </td>
                                         <td className="px-8 py-6">
                                             <p className="text-sm font-bold text-slate-600">{teacher.email}</p>
