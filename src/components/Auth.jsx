@@ -19,6 +19,7 @@ export default function Auth({ onLogin }) {
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const handleToggleMode = () => {
     setIsLogin(!isLogin);
@@ -54,65 +55,82 @@ export default function Auth({ onLogin }) {
   }, [formData, isLogin]);
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setInfoMessage('');
+  e.preventDefault();
+  setError('');
+  setInfoMessage('');
 
-    // 1. Validation for registration
-    if (!isLogin && formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
+  // 1. Registration Validation
+  if (!isLogin && formData.password !== formData.confirmPassword) {
+    setError('Passwords do not match');
+    return;
+  }
 
-    setIsLoading(true);
-    try {
-      const response = isLogin 
-        ? await api.login(formData.username, formData.password)
-        : await api.register({
-            ...formData,
-            middleInitial: (formData.middleInitial || '').toUpperCase()
+  setIsLoading(true);
+  try {
+    const response = isLogin 
+      ? await api.login(formData.username, formData.password)
+      : await api.register({
+          ...formData,
+          middleInitial: (formData.middleInitial || '').toUpperCase()
+        });
+    
+    // Check your console: does response.data.user have firstName/surname?
+    console.log("Auth Response:", response.data);
+
+    if (response.data && response.data.success) {
+      // Extract the full user object from the backend response
+      // If your backend puts it inside 'user', use that; otherwise fallback to the data object
+      const userPayload = response.data.user || response.data;
+
+      // 2. STUDENT REGISTRATION SUCCESS (MODAL)
+      // We block auto-login here so they see the "Success" modal first
+      if (!isLogin && formData.role === 'student') {
+        setIsLoading(false);
+        setShowSuccessModal(true); 
+        setIsLogin(true);          
+        // Reset form but keep username/email if you want to pre-fill the login field
+        setFormData({ 
+          ...formData, 
+          password: '', 
+          confirmPassword: '',
+          firstName: '',
+          middleInitial: '',
+          surname: '',
+          email: ''
+        }); 
+        return; 
+      }
+
+      // 3. TEACHER REGISTRATION / PENDING APPROVAL
+      // If the backend says isApproved is false, they are blocked from logging in
+      if (userPayload.isApproved === false) {
+          setIsLoading(false); 
+          setShowApprovalModal(true); 
+          setIsLogin(true); 
+          setFormData({
+            username: '', email: '', password: '', confirmPassword: '',
+            firstName: '', middleInitial: '', surname: '', role: 'student'
           });
-      
-      // Log the response to verify structure during testing
-      console.log("Auth Response:", response.data);
+          return; 
+      } 
 
-      if (response.data && response.data.success) {
-        const userPayload = response.data.user || response.data;
-
-        // 2. BLOCK PENDING TEACHERS:
-        // Based on your response: { success: true, isApproved: false }
-        // We check isApproved strictly. If it's false, they are blocked from logging in.
-        if (userPayload.isApproved === false) {
-            setIsLoading(false); 
-            setShowApprovalModal(true); // Shows the popup
-            setIsLogin(true); // Switches to login view
-            
-            // Clear form to prevent spamming and clean state
-            setFormData({
-              username: '', email: '', password: '', confirmPassword: '',
-              firstName: '', middleInitial: '', surname: '', role: 'student'
-            });
-
-            // IMPORTANT: return here prevents onLogin from executing
-            return; 
-        } 
-
-        // 3. PROCEED: If approved (isApproved is true or not present for students)
-        onLogin(userPayload);
-      }
-    } catch (err) {
-      // 4. CATCH 403: Backend blocks unapproved login attempts
-      if (err.response?.status === 403) {
-        setError(''); // Clear other errors
-        setShowApprovalModal(true);
-        setIsLogin(true);
-      } else {
-        setError(err.response?.data?.error || 'Authentication failed');
-      }
-    } finally {
-      setIsLoading(false);
+      // 4. SUCCESSFUL LOGIN: Proceed to Dashboard
+      // IMPORTANT: Ensure userPayload contains firstName, surname, and role
+      onLogin(userPayload);
     }
-  };
+  } catch (err) {
+    // Catch 403: Backend blocks unapproved teacher login attempts
+    if (err.response?.status === 403) {
+      setError(''); 
+      setShowApprovalModal(true);
+      setIsLogin(true);
+    } else {
+      setError(err.response?.data?.error || 'Authentication failed');
+    }
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="relative select-none flex flex-col items-center justify-center min-h-screen overflow-hidden bg-[#FDFCF5] font-['Poppins'] px-4">
@@ -222,7 +240,7 @@ export default function Auth({ onLogin }) {
             </div>
 
             {error && (
-              <div className="bg-red-50 text-red-500 text-[11px] font-black p-4 rounded-2xl border border-red-100 animate-bounce uppercase tracking-widest">
+              <div className="bg-red-50 text-red-500 text-[11px] font-black p-4 rounded-2xl border border-red-100 animate-bounce uppercase tracking-widest text-center">
                 {error}
               </div>
             )}
@@ -247,26 +265,50 @@ export default function Auth({ onLogin }) {
           </button>
         </div>
       </div>
-      {showApprovalModal && (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
-        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
-        <div className="relative bg-white p-8 rounded-[40px] shadow-2xl w-full max-w-sm text-center border border-white animate-in zoom-in-95">
-          <div className="w-20 h-20 bg-orange-100 text-orange-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
-            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+
+      {/* --- STUDENT SUCCESS MODAL --- */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+          <div className="relative bg-white p-8 rounded-[40px] shadow-2xl w-full max-w-sm text-center border border-white animate-in zoom-in-95">
+            <div className="w-20 h-20 bg-emerald-100 text-emerald-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Success!</h3>
+            <p className="text-slate-500 text-sm mb-8 leading-relaxed font-medium">
+              Your student account is ready. You can now log in to the SmartStroke platform using your new credentials.
+            </p>
+            <button 
+              onClick={() => setShowSuccessModal(false)}
+              className="w-full bg-[#001BB7] text-white py-4 rounded-2xl font-black shadow-xl hover:bg-[#0046FF] transition-all active:scale-95 uppercase text-xs tracking-widest"
+            >
+              Log In Now
+            </button>
           </div>
-          <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Pending Approval</h3>
-          <p className="text-slate-500 text-sm mb-8 leading-relaxed font-medium">
-            Your teacher account has been created! Please wait for the admin to verify your credentials. You will be able to log in once approved.
-          </p>
-          <button 
-            onClick={() => setShowApprovalModal(false)}
-            className="w-full bg-[#001BB7] text-white py-4 rounded-2xl font-black shadow-xl hover:bg-[#0046FF] transition-all active:scale-95 uppercase text-xs tracking-widest"
-          >
-            Got it, thanks!
-          </button>
         </div>
-      </div>
-    )}
+      )}
+
+      {/* --- TEACHER APPROVAL MODAL --- */}
+      {showApprovalModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+          <div className="relative bg-white p-8 rounded-[40px] shadow-2xl w-full max-w-sm text-center border border-white animate-in zoom-in-95">
+            <div className="w-20 h-20 bg-orange-100 text-orange-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Pending Approval</h3>
+            <p className="text-slate-500 text-sm mb-8 leading-relaxed font-medium">
+              Teacher account created! Please wait for an admin to verify your credentials. You'll be able to log in once approved.
+            </p>
+            <button 
+              onClick={() => setShowApprovalModal(false)}
+              className="w-full bg-[#001BB7] text-white py-4 rounded-2xl font-black shadow-xl hover:bg-[#0046FF] transition-all active:scale-95 uppercase text-xs tracking-widest"
+            >
+              Got it, thanks!
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
