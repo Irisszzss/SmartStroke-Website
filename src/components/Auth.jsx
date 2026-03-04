@@ -14,15 +14,16 @@ export default function Auth({ onLogin }) {
     firstName: '',
     middleInitial: '',
     surname: '',
-    role: 'student', 
-    secretCode: ''
+    role: 'student'
   });
   const [error, setError] = useState('');
+  const [infoMessage, setInfoMessage] = useState('');
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
 
-  // Function to handle mode switching and clear fields
   const handleToggleMode = () => {
     setIsLogin(!isLogin);
     setError('');
+    setInfoMessage('');
     setFormData({
       username: '', 
       email: '',
@@ -31,16 +32,14 @@ export default function Auth({ onLogin }) {
       firstName: '',
       middleInitial: '',
       surname: '',
-      role: 'student', 
-      secretCode: ''
+      role: 'student'
     });
   };
 
   const progressInfo = useMemo(() => {
     const loginFields = ['username', 'password'];
     const registerFields = ['firstName', 'surname', 'email', 'username', 'password', 'confirmPassword'];
-    if (!isLogin && formData.role === 'teacher') registerFields.push('secretCode');
-
+    
     const fieldsToTrack = isLogin ? loginFields : registerFields;
     const filledFields = fieldsToTrack.filter(field => formData[field] && formData[field].trim().length > 0);
     const percentage = filledFields.length / fieldsToTrack.length;
@@ -57,7 +56,9 @@ export default function Auth({ onLogin }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setInfoMessage('');
 
+    // 1. Validation for registration
     if (!isLogin && formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -69,23 +70,52 @@ export default function Auth({ onLogin }) {
         ? await api.login(formData.username, formData.password)
         : await api.register({
             ...formData,
-            username: formData.username,
-            email: formData.email,
-            middleInitial: formData.middleInitial.toUpperCase()
+            middleInitial: (formData.middleInitial || '').toUpperCase()
           });
       
-      if (response.data.success) {
-        onLogin(response.data);
+      // Log the response to verify structure during testing
+      console.log("Auth Response:", response.data);
+
+      if (response.data && response.data.success) {
+        const userPayload = response.data.user || response.data;
+
+        // 2. BLOCK PENDING TEACHERS:
+        // Based on your response: { success: true, isApproved: false }
+        // We check isApproved strictly. If it's false, they are blocked from logging in.
+        if (userPayload.isApproved === false) {
+            setIsLoading(false); 
+            setShowApprovalModal(true); // Shows the popup
+            setIsLogin(true); // Switches to login view
+            
+            // Clear form to prevent spamming and clean state
+            setFormData({
+              username: '', email: '', password: '', confirmPassword: '',
+              firstName: '', middleInitial: '', surname: '', role: 'student'
+            });
+
+            // IMPORTANT: return here prevents onLogin from executing
+            return; 
+        } 
+
+        // 3. PROCEED: If approved (isApproved is true or not present for students)
+        onLogin(userPayload);
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Authentication failed');
+      // 4. CATCH 403: Backend blocks unapproved login attempts
+      if (err.response?.status === 403) {
+        setError(''); // Clear other errors
+        setShowApprovalModal(true);
+        setIsLogin(true);
+      } else {
+        setError(err.response?.data?.error || 'Authentication failed');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="relative  select-none flex flex-col items-center justify-center min-h-screen overflow-hidden bg-[#FDFCF5] font-['Poppins'] px-4">
+    <div className="relative select-none flex flex-col items-center justify-center min-h-screen overflow-hidden bg-[#FDFCF5] font-['Poppins'] px-4">
       
       <style>{`
         @keyframes float {
@@ -93,20 +123,11 @@ export default function Auth({ onLogin }) {
           33% { transform: translate3d(40px, -60px, 0) scale(1.1); }
           66% { transform: translate3d(-30px, 30px, 0) scale(0.95); }
         }
-        .animate-float { animation: float 18s infinite cubic-bezier(0.45, 0, 0.55, 1); will-change: transform; }
-        .animate-float-delayed { animation: float 22s infinite cubic-bezier(0.45, 0, 0.55, 1) reverse; will-change: transform; }
-        
-        .expandable-section {
-          display: grid;
-          grid-template-rows: 0fr;
-          transition: grid-template-rows 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .expandable-section.open {
-          grid-template-rows: 1fr;
-        }
-        .expandable-content {
-          overflow: hidden;
-        }
+        .animate-float { animation: float 18s infinite cubic-bezier(0.45, 0, 0.55, 1); }
+        .animate-float-delayed { animation: float 22s infinite cubic-bezier(0.45, 0, 0.55, 1) reverse; }
+        .expandable-section { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+        .expandable-section.open { grid-template-rows: 1fr; }
+        .expandable-content { overflow: hidden; }
       `}</style>
 
       <div className="absolute top-[-15%] left-[-15%] w-[70%] h-[70%] bg-[#001BB7] opacity-[0.12] blur-[100px] rounded-full animate-float" />
@@ -115,16 +136,10 @@ export default function Auth({ onLogin }) {
       <div className="relative z-10 flex flex-col items-center w-full max-w-lg">
         <div className="m-10 text-center animate-in fade-in slide-in-from-top-8 duration-1000">
           <div className="bg-[#001BB7] w-20 h-20 rounded-[28px] flex items-center justify-center mx-auto mb-6 shadow-2xl transition-transform hover:scale-105">
-            <img 
-              src={SSLogo} 
-              alt="SmartStroke Logo" 
-              width="100" 
-              height="100" 
-              style={{ filter: 'brightness(0) invert(1)' }}
-            />
+            <img src={SSLogo} alt="SmartStroke Logo" width="100" height="100" style={{ filter: 'brightness(0) invert(1)' }} />
           </div>
           <h1 className="text-5xl font-black text-slate-900 tracking-tighter leading-none">SmartStroke</h1>
-          <p className="text-slate-500 font-bold text-[12 px] uppercase tracking-[0.4em] mt-3 opacity-70">Where Ideas Leave a Trace</p>
+          <p className="text-slate-500 font-bold text-[12px] uppercase tracking-[0.4em] mt-3 opacity-70">Where Ideas Leave a Trace</p>
         </div>
 
         <div className="bg-white/90 backdrop-blur-3xl p-10 rounded-[48px] shadow-2xl border border-white w-full animate-in zoom-in-95 duration-700 overflow-hidden mb-10">
@@ -134,11 +149,7 @@ export default function Auth({ onLogin }) {
             </h2>
             <div 
               className="h-1.5 rounded-full mt-2 transition-all duration-700 ease-out" 
-              style={{ 
-                width: progressInfo.width, 
-                backgroundColor: progressInfo.color,
-                boxShadow: `0 2px 10px ${progressInfo.glow}`
-              }} 
+              style={{ width: progressInfo.width, backgroundColor: progressInfo.color, boxShadow: `0 2px 10px ${progressInfo.glow}` }} 
             />
           </div>
           
@@ -206,20 +217,19 @@ export default function Auth({ onLogin }) {
                             <button type="button" className={`flex-1 py-3 rounded-xl text-[11px] font-black tracking-widest transition-all ${formData.role === 'student' ? 'bg-[#001BB7] text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => setFormData({...formData, role: 'student'})}>STUDENT</button>
                             <button type="button" className={`flex-1 py-3 rounded-xl text-[11px] font-black tracking-widest transition-all ${formData.role === 'teacher' ? 'bg-[#FF8040] text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => setFormData({...formData, role: 'teacher'})}>TEACHER</button>
                         </div>
-
-                        {!isLogin && formData.role === 'teacher' && (
-                        <div className="relative animate-in zoom-in-95 duration-300">
-                            <label className="block text-[10px] font-black text-orange-500 uppercase tracking-widest mb-1.5 ml-1">Teacher Access Key</label>
-                            <input type="text" value={formData.secretCode} placeholder="Enter secret code" className="w-full px-5 py-4 rounded-2xl bg-orange-50 border-2 border-transparent focus:border-orange-400 focus:bg-white transition-all outline-none font-bold text-sm text-orange-700" onChange={e => setFormData({...formData, secretCode: e.target.value})} />
-                        </div>
-                        )}
                     </div>
                 </div>
             </div>
 
             {error && (
-              <div className="bg-red-50 text-red-500 text-[11px] font-black p-4 rounded-2xl border border-red-100 animate-bounce">
-                <span className="uppercase tracking-widest">{error}</span>
+              <div className="bg-red-50 text-red-500 text-[11px] font-black p-4 rounded-2xl border border-red-100 animate-bounce uppercase tracking-widest">
+                {error}
+              </div>
+            )}
+
+            {infoMessage && (
+              <div className="bg-emerald-50 text-emerald-600 text-[11px] font-black p-4 rounded-2xl border border-emerald-100 animate-pulse uppercase tracking-widest text-center">
+                {infoMessage}
               </div>
             )}
 
@@ -237,6 +247,26 @@ export default function Auth({ onLogin }) {
           </button>
         </div>
       </div>
+      {showApprovalModal && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+        <div className="relative bg-white p-8 rounded-[40px] shadow-2xl w-full max-w-sm text-center border border-white animate-in zoom-in-95">
+          <div className="w-20 h-20 bg-orange-100 text-orange-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+          </div>
+          <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Pending Approval</h3>
+          <p className="text-slate-500 text-sm mb-8 leading-relaxed font-medium">
+            Your teacher account has been created! Please wait for the admin to verify your credentials. You will be able to log in once approved.
+          </p>
+          <button 
+            onClick={() => setShowApprovalModal(false)}
+            className="w-full bg-[#001BB7] text-white py-4 rounded-2xl font-black shadow-xl hover:bg-[#0046FF] transition-all active:scale-95 uppercase text-xs tracking-widest"
+          >
+            Got it, thanks!
+          </button>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

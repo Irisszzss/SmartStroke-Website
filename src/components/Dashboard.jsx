@@ -11,17 +11,26 @@ export default function Dashboard({ user, onSelectClass, triggerToast }) {
 
 
   const loadClasses = async () => {
+    // 1. Safety check: Don't fetch if user data isn't ready yet
+    if (!user?.userId) return; 
+
     try {
       setLoading(true);
-      //console.log("Fetching classes for role:", user.role);
       const res = await api.getClasses(user.userId, user.role);
       setClasses(res.data);
     } catch (err) {
-      console.error("Failed to load classes");
+      console.error("Failed to load classes", err);
+      // Optional: triggerToast("Failed to sync classrooms", "error");
     } finally {
       setLoading(false);
     }
   };
+
+  // 2. CRITICAL FIX: Re-run this effect whenever the userId changes
+  // This ensures that logging out/in as a different user refreshes the list
+  useEffect(() => { 
+    loadClasses(); 
+  }, [user?.userId, user?.role]);
 
   useEffect(() => { loadClasses(); }, []);
 

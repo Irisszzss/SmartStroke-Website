@@ -3,6 +3,7 @@ import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import ClassDetail from './components/ClassDetail';
 import Profile from './components/Profile';
+import AdminPage from './page/AdminPage'; 
 import IMUCanvas from './page/IMUCanvas';
 import SSLogo from './assets/SS_Logo.png';
 import { io } from 'socket.io-client';
@@ -17,6 +18,8 @@ export default function App() {
   
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
+  const ADMIN_EMAIL = "jonescolleeniris08@gmail.com";
+
   const triggerToast = useCallback((message, type = 'success') => {
     setToast({ show: true, message, type });
     setTimeout(() => {
@@ -29,17 +32,25 @@ export default function App() {
     triggerToast("Session ended by teacher", "info");
   }, [triggerToast]);
 
+  // Handle Socket Joining
   useEffect(() => {
     if (user && selectedClass?._id && activeView === 'whiteboard') {
       socket.emit('join-session', selectedClass._id);
     }
   }, [user, selectedClass, activeView]);
 
+  // Session Restoration & Admin View Check
   useEffect(() => {
     const savedUser = sessionStorage.getItem('smartstroke_user');
     if (savedUser) {
       try { 
-        setUser(JSON.parse(savedUser)); 
+        const parsedUser = JSON.parse(savedUser);
+        setUser(parsedUser);
+        
+        // Ensure Admin stays on Admin Panel after refresh
+        if (parsedUser.email === ADMIN_EMAIL) {
+          setActiveView('admin');
+        }
       } catch (e) { 
         sessionStorage.removeItem('smartstroke_user'); 
       }
@@ -48,16 +59,52 @@ export default function App() {
   }, []);
 
   const handleLogin = (userData) => {
+    // 1. GATEKEEPER CHECK: 
+    // If the user is a teacher but not approved, REJECT them here.
+    if (userData.role === 'teacher' && userData.isApproved === false) {
+      triggerToast("Access Denied: Account pending admin approval.", "error");
+      return; // Stop the function here. Do not set user, do not save to session.
+    }
+
+    // 2. Data Integrity Check:
+    if (!userData || !userData.email) {
+      triggerToast("Authentication error. Please try again.", "error");
+      return;
+    }
+
+    // 3. Clear old class data and set the verified user
+    setSelectedClass(null);
     setUser(userData);
     sessionStorage.setItem('smartstroke_user', JSON.stringify(userData));
-    triggerToast(`Welcome back, ${userData.name}!`, "success");
+    
+    // 4. Routing Logic
+    if (userData.email === ADMIN_EMAIL) {
+      setActiveView('admin');
+    } else if (userData.role === 'teacher') {
+      setActiveView('dashboard');
+    } else {
+      setActiveView('dashboard');
+    }
+    
+    triggerToast(`Welcome back, ${userData.name || 'User'}!`, "success");
   };
 
   const handleLogout = () => {
+    // 1. Clear State
     setUser(null);
+    setSelectedClass(null); // Clear this so the next user doesn't see old class data
+    
+    // 2. Clear Storage
     sessionStorage.removeItem('smartstroke_user');
+    sessionStorage.clear(); // Wipe everything to be safe
+    
+    // 3. Reset View
     setActiveView('dashboard');
+    
     triggerToast("Logged out successfully", "info");
+    
+    // OPTIONAL: Force a reload to ensure a clean slate
+    // window.location.reload(); 
   };
 
   const handleUpdateUser = (updatedData) => {
@@ -67,7 +114,6 @@ export default function App() {
   };
 
   const handleSaveSuccess = (newFileData) => {
-    // If newFileData is null or undefined, it's just an exit/force-exit
     if (newFileData) {
       if (selectedClass) {
         const updatedClass = {
@@ -78,10 +124,8 @@ export default function App() {
       }
       triggerToast("Note successfully saved!", "success");
     } else {
-      // If no data, the session just ended (teacher left or student clicked exit)
       triggerToast("Session ended", "info");
     }
-    
     setActiveView('detail');
   };
 
@@ -114,33 +158,31 @@ export default function App() {
           toast.type === 'info' ? 'bg-blue-600 text-white border-blue-700' : 
           'bg-emerald-600 text-white border-emerald-700'
         }`}>
-          {toast.type === 'error' ? (
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-          ) : toast.type === 'info' ? (
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><polyline points="20 6 9 17 4 12"/></svg>
-          )}
           <span className="text-center md:text-left truncate">{toast.message}</span>
         </div>
       )}
 
       {/* Navigation */}
       <nav className="bg-[#001BB7] p-3 md:p-4 text-white flex justify-between items-center shadow-xl z-50 shrink-0 select-none">
-        <div className="flex items-center gap-2 md:gap-3 cursor-pointer group outline-none" onClick={() => setActiveView('dashboard')}>
+        <div className="flex items-center gap-2 md:gap-3 cursor-pointer group outline-none" onClick={() => setActiveView(user.email === ADMIN_EMAIL ? 'admin' : 'dashboard')}>
           <div className="bg-orange-500 w-8 h-8 md:w-9 md:h-9 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform shrink-0">
-              <img 
-                src={SSLogo} 
-                alt="SmartStroke Logo" 
-                width="50" 
-                height="50" 
-                style={{ filter: 'brightness(0) invert(1)' }} 
-              />
+              <img src={SSLogo} alt="SmartStroke Logo" width="50" height="50" style={{ filter: 'brightness(0) invert(1)' }} />
           </div>
           <h1 className="text-sm md:text-xl font-black tracking-tight uppercase whitespace-nowrap">SmartStroke</h1>
         </div>
 
         <div className="flex items-center gap-2 md:gap-6">
+          {user.email === ADMIN_EMAIL && (
+            <button 
+              onClick={() => setActiveView('admin')}
+              className={`text-[10px] font-black tracking-widest px-3 py-2 rounded-xl border transition-all ${
+                activeView === 'admin' ? 'bg-orange-500 border-orange-600' : 'bg-white/10 border-white/20 hover:bg-white/20'
+              }`}
+            >
+              ADMIN PANEL
+            </button>
+          )}
+
           <div className="flex items-center gap-2 md:gap-3 cursor-pointer group select-none outline-none" onClick={() => setActiveView('profile')}>
             <div className="hidden md:block text-right">
               <p className="text-[9px] uppercase font-black opacity-40 leading-none tracking-widest mb-1">{getGreeting()}</p>
@@ -156,7 +198,6 @@ export default function App() {
             </div>
           </div>
           <button onClick={handleLogout} className="bg-white/5 hover:bg-red-500 border border-white/10 p-2 md:px-5 md:py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all active:scale-95 shadow-sm outline-none select-none flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             <span className="hidden sm:block">LOGOUT</span>
           </button>
         </div>
@@ -168,49 +209,41 @@ export default function App() {
           ? 'p-0 overflow-hidden' 
           : 'p-4 md:p-8 overflow-y-auto overflow-x-hidden'
       }`}>
-        <div className={`${activeView === 'whiteboard' ? 'flex-1 w-full h-full' : 'flex-initial max-w-7xl mx-auto w-full'}`}>
+        <div key={activeView} className={`${activeView === 'whiteboard' ? 'flex-1 w-full h-full' : 'flex-initial max-w-7xl mx-auto w-full'}`}>
             
-            {activeView === 'dashboard' && (
+            {activeView === 'admin' ? (
+              // FIXED: Added triggerToast prop here
+              <AdminPage triggerToast={triggerToast} />
+            ) : activeView === 'dashboard' ? (
               <Dashboard 
                 user={user} 
                 onSelectClass={(cls) => { setSelectedClass(cls); setActiveView('detail'); }} 
                 triggerToast={triggerToast}
               />
-            )}
-            
-            {activeView === 'detail' && (
+            ) : activeView === 'detail' ? (
               <ClassDetail 
                 user={user} 
                 classroom={selectedClass} 
-                onBack={() => setActiveView('dashboard')}
+                onBack={() => setActiveView(user.email === ADMIN_EMAIL ? 'admin' : 'dashboard')}
                 onStartSession={() => setActiveView('whiteboard')}
                 triggerToast={triggerToast}
               />
-            )}
-
-            {activeView === 'profile' && (
+            ) : activeView === 'profile' ? (
               <Profile 
                 user={user} 
                 onUpdateUser={handleUpdateUser} 
-                onBack={() => setActiveView('dashboard')} 
+                onBack={() => setActiveView(user.email === ADMIN_EMAIL ? 'admin' : 'dashboard')} 
                 triggerToast={triggerToast} 
               />
-            )}
-
-            {activeView === 'whiteboard' && (
+            ) : activeView === 'whiteboard' ? (
               <div className="flex-1 flex flex-col h-full w-full bg-white overflow-hidden relative">
-                {/* Back Button */}
                 <button 
                   onClick={() => setActiveView('detail')} 
                   className="fixed bottom-6 right-6 lg:absolute lg:top-6 lg:left-10 lg:bottom-auto lg:right-auto z-[60] 
                   bg-white/90 backdrop-blur shadow-2xl border-2 border-[#001BB7]/10 px-5 py-3 rounded-2xl flex items-center 
-                  gap-2 text-[#001BB7] font-black text-xs uppercase tracking-[0.2em] transition-all duration-300 active:scale-90
-                  select-none outline-none cursor-pointer hover:bg-white hover:scale-105 hover:shadow-blue-200/50 hover:border-[#001BB7]/30">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                  gap-2 text-[#001BB7] font-black text-xs uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95">
                   Exit Session
                 </button>
-                
-                {/* Whiteboard Canvas */}
                 <div className="w-full h-full">
                     <IMUCanvas 
                       classId={selectedClass?._id} 
@@ -221,7 +254,7 @@ export default function App() {
                     />
                 </div>
               </div>
-            )}
+            ) : null}
         </div>
       </main>
     </div>
