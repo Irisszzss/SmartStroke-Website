@@ -8,7 +8,13 @@ import IMUCanvas from './page/IMUCanvas';
 import SSLogo from './assets/SS_Logo.png';
 import { io } from 'socket.io-client';
 
-const socket = io('https://smartstroke-api.onrender.com');
+// Use environment variable for production, fallback for local dev
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://smartstroke-api.onrender.com';
+
+const socket = io(SOCKET_URL, {
+  transports: ['websocket'],
+  reconnection: true
+});
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -59,59 +65,60 @@ export default function App() {
   }, []);
 
   const handleLogin = (userData) => {
-    // 1. GATEKEEPER CHECK: 
-    // If the user is a teacher but not approved, REJECT them here.
-    if (userData.role === 'teacher' && userData.isApproved === false) {
-      triggerToast("Access Denied: Account pending admin approval.", "error");
-      return; // Stop the function here. Do not set user, do not save to session.
-    }
+  // 1. Extract the payload
+  const userPayload = userData.user || userData;
 
-    // 2. Data Integrity Check:
-    if (!userData || !userData.email) {
-      triggerToast("Authentication error. Please try again.", "error");
-      return;
-    }
+  // 2. Teacher Approval Check
+  if (userPayload.role === 'teacher' && userPayload.isApproved === false) {
+    triggerToast("Access Denied: Account pending admin approval.", "error");
+    return; 
+  }
 
-    // 3. Clear old class data and set the verified user
-    setSelectedClass(null);
-    setUser(userData);
-    sessionStorage.setItem('smartstroke_user', JSON.stringify(userData));
-    
-    // 4. Routing Logic
-    if (userData.email === ADMIN_EMAIL) {
-      setActiveView('admin');
-    } else if (userData.role === 'teacher') {
-      setActiveView('dashboard');
-    } else {
-      setActiveView('dashboard');
-    }
-    
-    triggerToast(`Welcome back, ${userData.name || 'User'}!`, "success");
-  };
+  // 3. Fallback logic: If backend STILL doesn't have firstName (old accounts)
+  if (!userPayload.firstName && userPayload.name) {
+    const nameParts = userPayload.name.trim().split(/\s+/);
+    userPayload.firstName = nameParts[0] || 'User';
+    userPayload.surname = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+  }
+
+  // 4. Final State Sync
+  setSelectedClass(null);
+  setUser(userPayload);
+  
+  // Persist the FULL object to session storage
+  sessionStorage.setItem('smartstroke_user', JSON.stringify(userPayload));
+  
+  // 5. Navigation
+  if (userPayload.email === ADMIN_EMAIL) {
+    setActiveView('admin');
+  } else {
+    setActiveView('dashboard');
+  }
+  
+  triggerToast(`Welcome back, ${userPayload.firstName || 'User'}!`, "success");
+};
 
   const handleLogout = () => {
-    // 1. Clear State
     setUser(null);
-    setSelectedClass(null); // Clear this so the next user doesn't see old class data
-    
-    // 2. Clear Storage
+    setSelectedClass(null);
     sessionStorage.removeItem('smartstroke_user');
-    sessionStorage.clear(); // Wipe everything to be safe
-    
-    // 3. Reset View
+    sessionStorage.clear(); 
     setActiveView('dashboard');
-    
     triggerToast("Logged out successfully", "info");
-    
-    // OPTIONAL: Force a reload to ensure a clean slate
-    // window.location.reload(); 
   };
 
-  const handleUpdateUser = (updatedData) => {
-    const newUser = { ...user, ...updatedData };
-    setUser(newUser);
+  // In App.jsx
+const handleUpdateUser = (updatedData) => {
+  setUser(prevUser => {
+    // Merge backend response with existing state to ensure no fields are lost
+    const newUser = { ...prevUser, ...updatedData };
+    
+    // Immediately sync with session storage for persistence
     sessionStorage.setItem('smartstroke_user', JSON.stringify(newUser));
-  };
+    
+    return newUser;
+  });
+};
 
   const handleSaveSuccess = (newFileData) => {
     if (newFileData) {
@@ -186,14 +193,14 @@ export default function App() {
           <div className="flex items-center gap-2 md:gap-3 cursor-pointer group select-none outline-none" onClick={() => setActiveView('profile')}>
             <div className="hidden md:block text-right">
               <p className="text-[9px] uppercase font-black opacity-40 leading-none tracking-widest mb-1">{getGreeting()}</p>
-              <p className="text-sm font-bold group-hover:text-orange-400 transition-colors">{user.name}</p>
+              <p className="text-sm font-bold group-hover:text-orange-400 transition-colors">{user.firstName || user.name}</p>
             </div>
             
             <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center text-xs md:text-sm font-black group-hover:border-orange-500 group-hover:bg-orange-500 transition-all shadow-lg overflow-hidden shrink-0">
               {avatarUrl ? (
                 <img src={avatarUrl} alt="profile" className="w-full h-full object-cover" />
               ) : (
-                user.name?.charAt(0).toUpperCase()
+                (user.firstName || user.name || 'U').charAt(0).toUpperCase()
               )}
             </div>
           </div>
@@ -212,7 +219,6 @@ export default function App() {
         <div key={activeView} className={`${activeView === 'whiteboard' ? 'flex-1 w-full h-full' : 'flex-initial max-w-7xl mx-auto w-full'}`}>
             
             {activeView === 'admin' ? (
-              // FIXED: Added triggerToast prop here
               <AdminPage triggerToast={triggerToast} />
             ) : activeView === 'dashboard' ? (
               <Dashboard 
