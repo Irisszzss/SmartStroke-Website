@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../utils/api';
 import SSLogo from '../assets/SS_Logo.png';
 
