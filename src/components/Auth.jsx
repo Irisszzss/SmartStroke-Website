@@ -58,105 +58,88 @@ export default function Auth({ onLogin }) {
 
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError('');
-  setInfoMessage('');
+    e.preventDefault();
+    setError('');
+    setInfoMessage('');
 
-  // 1. Registration Validation
-  if (!isLogin && formData.password !== formData.confirmPassword) {
-    setError('Passwords do not match');
-    return;
-  }
+    if (!isLogin && formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
 
-  setIsLoading(true);
-  try {
-    const response = isLogin 
-      ? await api.login(formData.username, formData.password)
-      : await api.register({
-          ...formData,
-          middleInitial: (formData.middleInitial || '').toUpperCase()
-        });
-    
-    console.log("Auth Response:", response.data);
-
-    if (response.data && response.data.success) {
-      const userPayload = response.data.user || response.data;
-
-      // --- START QR AUTO-JOIN LOGIC ---
-      // We only do this on LOGIN (not registration) for students
-      const joinCode = searchParams.get('joinCode');
-      
-      if (isLogin && userPayload.role === 'student' && joinCode) {
-        try {
-          // 1. Get the ID (handling both userId or _id formats)
-          const sid = userPayload.userId || userPayload._id;
-          
-          // 2. CLEAN THE CODE: Remove spaces and force Uppercase
-          const cleanCode = joinCode.trim().toUpperCase();
-          
-          // 3. Call the join class endpoint with the cleaned code
-          await api.joinClass(sid, cleanCode);
-          console.log(`Auto-joined class: ${cleanCode}`);
-          
-          // 4. Update payload so dashboard knows which class to highlight
-          userPayload.autoRedirectClass = cleanCode; 
-          
-        } catch (joinErr) {
-          // If this triggers, it means the backend returned 404/500
-          console.error("Auto-join failed: Class code does not exist in database.", joinErr);
-          
-          // We don't block login, but we notify the console for debugging
-        }
-      }
-      // --- END QR AUTO-JOIN LOGIC ---
-
-      // 2. STUDENT REGISTRATION SUCCESS (MODAL)
-      if (!isLogin && formData.role === 'student') {
-        setIsLoading(false);
-        setShowSuccessModal(true); 
-        setIsLogin(true);          
-        setFormData({ 
-          ...formData, 
-          password: '', 
-          confirmPassword: '',
-          firstName: '',
-          middleInitial: '',
-          surname: '',
-          email: ''
-        }); 
-        return; 
-      }
-
-      // 3. TEACHER REGISTRATION / PENDING APPROVAL
-      if (userPayload.isApproved === false) {
-          setIsLoading(false); 
-          setShowApprovalModal(true); 
-          setIsLogin(true); 
-          setFormData({
-            username: '', email: '', password: '', confirmPassword: '',
-            firstName: '', middleInitial: '', surname: '', role: 'student'
+    setIsLoading(true);
+    try {
+      const response = isLogin 
+        ? await api.login(formData.username, formData.password)
+        : await api.register({
+            ...formData,
+            middleInitial: (formData.middleInitial || '').toUpperCase()
           });
-          return; 
-      } 
+      
+      console.log("Auth Response:", response.data);
 
-      // 4. SUCCESSFUL LOGIN: Proceed to Dashboard
-      onLogin(userPayload);
+      if (response.data && response.data.success) {
+        const userPayload = response.data.user || response.data;
+
+        const joinCode = searchParams.get('joinCode');
+        
+        if (isLogin && userPayload.role === 'student' && joinCode) {
+          try {
+            const sid = userPayload.userId || userPayload._id;
+            const cleanCode = joinCode.trim().toUpperCase();
+            await api.joinClass(sid, cleanCode);
+            console.log(`Auto-joined class: ${cleanCode}`);
+            userPayload.autoRedirectClass = cleanCode; 
+          } catch (joinErr) {
+            console.error("Auto-join failed: Class code does not exist in database.", joinErr);
+          }
+        }
+
+        if (!isLogin && formData.role === 'student') {
+          setIsLoading(false);
+          setShowSuccessModal(true); 
+          setIsLogin(true);          
+          setFormData({ 
+            ...formData, 
+            password: '', 
+            confirmPassword: '',
+            firstName: '',
+            middleInitial: '',
+            surname: '',
+            email: ''
+          }); 
+          return; 
+        }
+
+        if (userPayload.isApproved === false) {
+            setIsLoading(false); 
+            setShowApprovalModal(true); 
+            setIsLogin(true); 
+            setFormData({
+              username: '', email: '', password: '', confirmPassword: '',
+              firstName: '', middleInitial: '', surname: '', role: 'student'
+            });
+            return; 
+        } 
+
+        onLogin(userPayload);
+      }
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setError(''); 
+        setShowApprovalModal(true);
+        setIsLogin(true);
+      } else {
+        setError(err.response?.data?.error || 'Authentication failed');
+      }
+    } finally {
+      setIsLoading(false);
     }
-  } catch (err) {
-    if (err.response?.status === 403) {
-      setError(''); 
-      setShowApprovalModal(true);
-      setIsLogin(true);
-    } else {
-      setError(err.response?.data?.error || 'Authentication failed');
-    }
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   return (
-    <div className="relative select-none flex flex-col items-center justify-center min-h-screen overflow-x-hidden bg-[#FDFCF5] font-['Poppins'] px-4">
+    /* FIXED: min-h-screen with overflow-y-auto and vertical padding to prevent squishing */
+    <div className="relative select-none flex flex-col items-center justify-start min-h-screen overflow-y-auto overflow-x-hidden bg-[#FDFCF5] font-['Poppins'] px-4 py-12">
       
       <style>{`
         @keyframes float {
@@ -171,11 +154,11 @@ export default function Auth({ onLogin }) {
         .expandable-content { overflow: hidden; }
       `}</style>
 
-      <div className="absolute top-[-15%] left-[-15%] w-[70%] h-[70%] bg-[#001BB7] opacity-[0.12] blur-[100px] rounded-full animate-float" />
-      <div className="absolute bottom-[-15%] right-[-15%] w-[70%] h-[70%] bg-[#FF8040] opacity-[0.12] blur-[100px] rounded-full animate-float-delayed" />
+      <div className="absolute top-[-15%] left-[-15%] w-[70%] h-[70%] bg-[#001BB7] opacity-[0.12] blur-[100px] rounded-full animate-float pointer-events-none" />
+      <div className="absolute bottom-[-15%] right-[-15%] w-[70%] h-[70%] bg-[#FF8040] opacity-[0.12] blur-[100px] rounded-full animate-float-delayed pointer-events-none" />
 
       <div className="relative z-10 flex flex-col items-center w-full max-w-lg">
-        <div className="m-10 text-center animate-in fade-in slide-in-from-top-8 duration-1000">
+        <div className="mb-10 text-center animate-in fade-in slide-in-from-top-8 duration-1000">
           <div className="bg-[#001BB7] w-20 h-20 rounded-[28px] flex items-center justify-center mx-auto mb-6 shadow-2xl transition-transform hover:scale-105">
             <img src={SSLogo} alt="SmartStroke Logo" width="100" height="100" style={{ filter: 'brightness(0) invert(1)' }} />
           </div>
@@ -183,7 +166,7 @@ export default function Auth({ onLogin }) {
           <p className="text-slate-500 font-bold text-[12px] uppercase tracking-[0.4em] mt-3 opacity-70">Where Ideas Leave a Trace</p>
         </div>
 
-        <div className="bg-white/90 backdrop-blur-3xl p-10 rounded-[48px] shadow-2xl border border-white w-full animate-in zoom-in-95 duration-700 overflow-hidden mb-10">
+        <div className="bg-white/90 backdrop-blur-3xl p-8 md:p-10 rounded-[48px] shadow-2xl border border-white w-full animate-in zoom-in-95 duration-700 overflow-visible mb-10">
           <div className="mb-8">
             <h2 className="text-3xl font-black text-slate-800 tracking-tight transition-all duration-500">
               {isLogin ? 'Sign In' : 'Get Started'}
@@ -202,20 +185,20 @@ export default function Auth({ onLogin }) {
                         <div className="grid grid-cols-12 gap-3">
                             <div className="col-span-5">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">First Name</label>
-                                <input required={!isLogin} type="text" value={formData.firstName} placeholder="Colleen" className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-[#001BB7] focus:bg-white transition-all outline-none font-bold text-sm" onChange={e => setFormData({...formData, firstName: e.target.value})} />
+                                <input required={!isLogin} type="text" value={formData.firstName} placeholder="Juan" className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-[#001BB7] focus:bg-white transition-all outline-none font-bold text-sm" onChange={e => setFormData({...formData, firstName: e.target.value})} />
                             </div>
                             <div className="col-span-2">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 text-center">MI</label>
-                                <input maxLength="2" type="text" value={formData.middleInitial} placeholder="P" className="w-full px-1 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-[#001BB7] focus:bg-white transition-all outline-none font-bold text-sm text-center uppercase" onChange={e => setFormData({...formData, middleInitial: e.target.value})} />
+                                <input maxLength="2" type="text" value={formData.middleInitial} placeholder="C" className="w-full px-1 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-[#001BB7] focus:bg-white transition-all outline-none font-bold text-sm text-center uppercase" onChange={e => setFormData({...formData, middleInitial: e.target.value})} />
                             </div>
                             <div className="col-span-5">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Surname</label>
-                                <input required={!isLogin} type="text" value={formData.surname} placeholder="Jones" className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-[#001BB7] focus:bg-white transition-all outline-none font-bold text-sm" onChange={e => setFormData({...formData, surname: e.target.value})} />
+                                <input required={!isLogin} type="text" value={formData.surname} placeholder="Dela Cruz" className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-[#001BB7] focus:bg-white transition-all outline-none font-bold text-sm" onChange={e => setFormData({...formData, surname: e.target.value})} />
                             </div>
                         </div>
                         <div className="relative group">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">School Email</label>
-                            <input required={!isLogin} type="email" value={formData.email} placeholder="name@school.edu" className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-[#001BB7] focus:bg-white transition-all outline-none font-bold text-sm" onChange={e => setFormData({...formData, email: e.target.value})} />
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Email</label>
+                            <input required={!isLogin} type="email" value={formData.email} placeholder="name@gmail.com" className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-[#001BB7] focus:bg-white transition-all outline-none font-bold text-sm" onChange={e => setFormData({...formData, email: e.target.value})} />
                         </div>
                     </div>
                 </div>
@@ -289,7 +272,7 @@ export default function Auth({ onLogin }) {
         </div>
       </div>
 
-      {/* --- STUDENT SUCCESS MODAL --- */}
+      {/* MODALS */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
@@ -311,7 +294,6 @@ export default function Auth({ onLogin }) {
         </div>
       )}
 
-      {/* --- TEACHER APPROVAL MODAL --- */}
       {showApprovalModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
