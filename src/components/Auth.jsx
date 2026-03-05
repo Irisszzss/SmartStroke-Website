@@ -156,7 +156,7 @@ export default function Auth({ onLogin }) {
 };
 
   return (
-    <div className="relative select-none flex flex-col items-center justify-center min-h-screen overflow-hidden bg-[#FDFCF5] font-['Poppins'] px-4">
+    <div className="relative select-none flex flex-col items-center justify-center min-h-screen overflow-x-hidden bg-[#FDFCF5] font-['Poppins'] px-4">
       
       <style>{`
         @keyframes float {
