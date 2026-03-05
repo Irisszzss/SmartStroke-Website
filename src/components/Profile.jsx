@@ -243,7 +243,7 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
               <div className="col-span-12 md:col-span-2 space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-center block">M.I.</label>
                 <input
-                  maxLength="1"
+                  maxLength="2"
                   className="w-full bg-slate-50 border-2 border-transparent p-4 rounded-2xl outline-none focus:border-[#001BB7] focus:bg-white transition-all font-bold text-slate-800 shadow-sm text-center uppercase"
                   value={formData.middleInitial}
                   onChange={e => setFormData({ ...formData, middleInitial: e.target.value })}

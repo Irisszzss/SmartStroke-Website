@@ -399,7 +399,11 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
                 <button onClick={() => setShowQRModal(false)} className="absolute right-6 top-6 text-slate-300 hover:text-slate-900 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
                 <h3 className="text-2xl font-black text-slate-900 mb-6 uppercase tracking-tight">Access QR</h3>
                 <div ref={qrRef} className="bg-slate-50 p-6 rounded-[24px] md:rounded-[32px] inline-block mb-8">
-                    <QRCodeCanvas value={classroom.code} size={180} level={"H"} />
+                    <QRCodeCanvas 
+                      value={`${window.location.origin}/login?joinCode=${classroom.code}`} 
+                      size={180} 
+                      level={"H"} 
+                    />
                 </div>
                 <button onClick={downloadQR} className="w-full bg-[#001BB7] text-white py-5 rounded-[20px] md:rounded-[24px] font-black shadow-xl hover:bg-[#0046FF] transition-all uppercase text-xs tracking-widest active:scale-95">Save QR Image</button>
             </div>

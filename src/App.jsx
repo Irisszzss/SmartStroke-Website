@@ -7,6 +7,7 @@ import AdminPage from './page/AdminPage';
 import IMUCanvas from './page/IMUCanvas';
 import SSLogo from './assets/SS_Logo.png';
 import { io } from 'socket.io-client';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // Use environment variable for production, fallback for local dev
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://smartstroke-api.onrender.com';
@@ -65,38 +66,31 @@ export default function App() {
   }, []);
 
   const handleLogin = (userData) => {
-  // 1. Extract the payload
-  const userPayload = userData.user || userData;
+    const userPayload = userData.user || userData;
 
-  // 2. Teacher Approval Check
-  if (userPayload.role === 'teacher' && userPayload.isApproved === false) {
-    triggerToast("Access Denied: Account pending admin approval.", "error");
-    return; 
-  }
+    if (userPayload.role === 'teacher' && userPayload.isApproved === false) {
+      triggerToast("Access Denied: Account pending admin approval.", "error");
+      return; 
+    }
 
-  // 3. Fallback logic: If backend STILL doesn't have firstName (old accounts)
-  if (!userPayload.firstName && userPayload.name) {
-    const nameParts = userPayload.name.trim().split(/\s+/);
-    userPayload.firstName = nameParts[0] || 'User';
-    userPayload.surname = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
-  }
+    if (!userPayload.firstName && userPayload.name) {
+      const nameParts = userPayload.name.trim().split(/\s+/);
+      userPayload.firstName = nameParts[0] || 'User';
+      userPayload.surname = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+    }
 
-  // 4. Final State Sync
-  setSelectedClass(null);
-  setUser(userPayload);
-  
-  // Persist the FULL object to session storage
-  sessionStorage.setItem('smartstroke_user', JSON.stringify(userPayload));
-  
-  // 5. Navigation
-  if (userPayload.email === ADMIN_EMAIL) {
-    setActiveView('admin');
-  } else {
-    setActiveView('dashboard');
-  }
-  
-  triggerToast(`Welcome back, ${userPayload.firstName || 'User'}!`, "success");
-};
+    setSelectedClass(null);
+    setUser(userPayload);
+    sessionStorage.setItem('smartstroke_user', JSON.stringify(userPayload));
+    
+    if (userPayload.email === ADMIN_EMAIL) {
+      setActiveView('admin');
+    } else {
+      setActiveView('dashboard');
+    }
+    
+    triggerToast(`Welcome back, ${userPayload.firstName || 'User'}!`, "success");
+  };
 
   const handleLogout = () => {
     setUser(null);
@@ -107,18 +101,13 @@ export default function App() {
     triggerToast("Logged out successfully", "info");
   };
 
-  // In App.jsx
-const handleUpdateUser = (updatedData) => {
-  setUser(prevUser => {
-    // Merge backend response with existing state to ensure no fields are lost
-    const newUser = { ...prevUser, ...updatedData };
-    
-    // Immediately sync with session storage for persistence
-    sessionStorage.setItem('smartstroke_user', JSON.stringify(newUser));
-    
-    return newUser;
-  });
-};
+  const handleUpdateUser = (updatedData) => {
+    setUser(prevUser => {
+      const newUser = { ...prevUser, ...updatedData };
+      sessionStorage.setItem('smartstroke_user', JSON.stringify(newUser));
+      return newUser;
+    });
+  };
 
   const handleSaveSuccess = (newFileData) => {
     if (newFileData) {
@@ -144,125 +133,147 @@ const handleUpdateUser = (updatedData) => {
   };
 
   if (loading) return <div className="h-screen bg-[#FDFCF5]" />;
-  if (!user) return <Auth onLogin={handleLogin} />;
 
-  const avatarUrl = user.profilePicture 
+  const avatarUrl = user?.profilePicture 
     ? (user.profilePicture.startsWith('http') 
         ? user.profilePicture 
         : `https://smartstroke-api.onrender.com/${user.profilePicture}`)
     : null;
 
   return (
-    <div className="h-[100dvh] bg-[#FDFCF5] font-['Poppins'] text-slate-800 flex flex-col overflow-hidden">
-      
-      {/* Toast Notification */}
-      {toast.show && (
-        <div className={`fixed top-20 md:top-24 left-1/2 -translate-x-1/2 z-[100] 
-          w-[92%] md:w-auto px-4 md:px-6 py-3 rounded-2xl shadow-2xl font-bold 
-          text-xs md:text-sm animate-in slide-in-from-top-4 duration-300 
-          flex items-center justify-center md:justify-start gap-3 border select-none outline-none ${
-          toast.type === 'error' ? 'bg-red-500 text-white border-red-600' : 
-          toast.type === 'info' ? 'bg-blue-600 text-white border-blue-700' : 
-          'bg-emerald-600 text-white border-emerald-700'
-        }`}>
-          <span className="text-center md:text-left truncate">{toast.message}</span>
-        </div>
-      )}
-
-      {/* Navigation */}
-      <nav className="bg-[#001BB7] p-3 md:p-4 text-white flex justify-between items-center shadow-xl z-50 shrink-0 select-none">
-        <div className="flex items-center gap-2 md:gap-3 cursor-pointer group outline-none" onClick={() => setActiveView(user.email === ADMIN_EMAIL ? 'admin' : 'dashboard')}>
-          <div className="bg-orange-500 w-8 h-8 md:w-9 md:h-9 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform shrink-0">
-              <img src={SSLogo} alt="SmartStroke Logo" width="50" height="50" style={{ filter: 'brightness(0) invert(1)' }} />
+    <Router>
+      <div className="h-[100dvh] bg-[#FDFCF5] font-['Poppins'] text-slate-800 flex flex-col overflow-hidden">
+        
+        {/* Toast Notification */}
+        {toast.show && (
+          <div className={`fixed top-20 md:top-24 left-1/2 -translate-x-1/2 z-[100] 
+            w-[92%] md:w-auto px-4 md:px-6 py-3 rounded-2xl shadow-2xl font-bold 
+            text-xs md:text-sm animate-in slide-in-from-top-4 duration-300 
+            flex items-center justify-center md:justify-start gap-3 border select-none outline-none ${
+            toast.type === 'error' ? 'bg-red-500 text-white border-red-600' : 
+            toast.type === 'info' ? 'bg-blue-600 text-white border-blue-700' : 
+            'bg-emerald-600 text-white border-emerald-700'
+          }`}>
+            <span className="text-center md:text-left truncate">{toast.message}</span>
           </div>
-          <h1 className="text-sm md:text-xl font-black tracking-tight uppercase whitespace-nowrap">SmartStroke</h1>
-        </div>
+        )}
 
-        <div className="flex items-center gap-2 md:gap-6">
-          {user.email === ADMIN_EMAIL && (
-            <button 
-              onClick={() => setActiveView('admin')}
-              className={`text-[10px] font-black tracking-widest px-3 py-2 rounded-xl border transition-all ${
-                activeView === 'admin' ? 'bg-orange-500 border-orange-600' : 'bg-white/10 border-white/20 hover:bg-white/20'
-              }`}
-            >
-              ADMIN PANEL
-            </button>
-          )}
+        <Routes>
+          {/* Handle Login Path for QR Scans */}
+          <Route path="/login" element={!user ? <Auth onLogin={handleLogin} /> : <Navigate to="/" />} />
 
-          <div className="flex items-center gap-2 md:gap-3 cursor-pointer group select-none outline-none" onClick={() => setActiveView('profile')}>
-            <div className="hidden md:block text-right">
-              <p className="text-[9px] uppercase font-black opacity-40 leading-none tracking-widest mb-1">{getGreeting()}</p>
-              <p className="text-sm font-bold group-hover:text-orange-400 transition-colors">{user.firstName || user.name}</p>
-            </div>
-            
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center text-xs md:text-sm font-black group-hover:border-orange-500 group-hover:bg-orange-500 transition-all shadow-lg overflow-hidden shrink-0">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="profile" className="w-full h-full object-cover" />
-              ) : (
-                (user.firstName || user.name || 'U').charAt(0).toUpperCase()
-              )}
-            </div>
-          </div>
-          <button onClick={handleLogout} className="bg-white/5 hover:bg-red-500 border border-white/10 p-2 md:px-5 md:py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all active:scale-95 shadow-sm outline-none select-none flex items-center gap-2">
-            <span className="hidden sm:block">LOGOUT</span>
-          </button>
-        </div>
-      </nav>
+          {/* Main App Path */}
+          <Route path="/" element={
+            !user ? <Auth onLogin={handleLogin} /> : (
+              <div className="flex flex-col h-full overflow-hidden">
+                {/* Navigation */}
+                <nav className="bg-[#001BB7] p-3 md:p-4 text-white flex justify-between items-center shadow-xl z-50 shrink-0 select-none">
+                  <div className="flex items-center gap-2 md:gap-3 cursor-pointer group outline-none" onClick={() => setActiveView(user.email === ADMIN_EMAIL ? 'admin' : 'dashboard')}>
+                    <div className="bg-orange-500 w-8 h-8 md:w-9 md:h-9 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform shrink-0">
+                        <img src={SSLogo} alt="SmartStroke Logo" width="50" height="50" style={{ filter: 'brightness(0) invert(1)' }} />
+                    </div>
+                    <h1 className="text-sm md:text-xl font-black tracking-tight uppercase whitespace-nowrap">SmartStroke</h1>
+                  </div>
 
-      {/* Main Content Area */}
-      <main className={`flex-1 flex flex-col ${
-        activeView === 'whiteboard' 
-          ? 'p-0 overflow-hidden' 
-          : 'p-4 md:p-8 overflow-y-auto overflow-x-hidden'
-      }`}>
-        <div key={activeView} className={`${activeView === 'whiteboard' ? 'flex-1 w-full h-full' : 'flex-initial max-w-7xl mx-auto w-full'}`}>
-            
-            {activeView === 'admin' ? (
-              <AdminPage triggerToast={triggerToast} />
-            ) : activeView === 'dashboard' ? (
-              <Dashboard 
-                user={user} 
-                onSelectClass={(cls) => { setSelectedClass(cls); setActiveView('detail'); }} 
-                triggerToast={triggerToast}
-              />
-            ) : activeView === 'detail' ? (
-              <ClassDetail 
-                user={user} 
-                classroom={selectedClass} 
-                onBack={() => setActiveView(user.email === ADMIN_EMAIL ? 'admin' : 'dashboard')}
-                onStartSession={() => setActiveView('whiteboard')}
-                triggerToast={triggerToast}
-              />
-            ) : activeView === 'profile' ? (
-              <Profile 
-                user={user} 
-                onUpdateUser={handleUpdateUser} 
-                onBack={() => setActiveView(user.email === ADMIN_EMAIL ? 'admin' : 'dashboard')} 
-                triggerToast={triggerToast} 
-              />
-            ) : activeView === 'whiteboard' ? (
-              <div className="flex-1 flex flex-col h-full w-full bg-white overflow-hidden relative">
-                <button 
-                  onClick={() => setActiveView('detail')} 
-                  className="fixed bottom-6 right-6 lg:absolute lg:top-6 lg:left-10 lg:bottom-auto lg:right-auto z-[60] 
-                  bg-white/90 backdrop-blur shadow-2xl border-2 border-[#001BB7]/10 px-5 py-3 rounded-2xl flex items-center 
-                  gap-2 text-[#001BB7] font-black text-xs uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95">
-                  Exit Session
-                </button>
-                <div className="w-full h-full">
-                    <IMUCanvas 
-                      classId={selectedClass?._id} 
-                      onSaveSuccess={handleSaveSuccess}
-                      onForceExit={handleForceExit}
-                      role={user.role}
-                      socket={socket}
-                    />
-                </div>
+                  <div className="flex items-center gap-2 md:gap-6">
+                    {user.email === ADMIN_EMAIL && (
+                      <button 
+                        onClick={() => setActiveView('admin')}
+                        className={`text-[10px] font-black tracking-widest px-3 py-2 rounded-xl border transition-all ${
+                          activeView === 'admin' ? 'bg-orange-500 border-orange-600' : 'bg-white/10 border-white/20 hover:bg-white/20'
+                        }`}
+                      >
+                        ADMIN PANEL
+                      </button>
+                    )}
+
+                    <div className="flex items-center gap-2 md:gap-3 cursor-pointer group select-none outline-none" onClick={() => setActiveView('profile')}>
+                      <div className="hidden md:block text-right">
+                        <p className="text-[9px] uppercase font-black opacity-40 leading-none tracking-widest mb-1">{getGreeting()}</p>
+                        <p className="text-sm font-bold group-hover:text-orange-400 transition-colors">{user.firstName || user.name}</p>
+                      </div>
+                      
+                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center text-xs md:text-sm font-black group-hover:border-orange-500 group-hover:bg-orange-500 transition-all shadow-lg overflow-hidden shrink-0">
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt="profile" className="w-full h-full object-cover" />
+                        ) : (
+                          (user.firstName || user.name || 'U').charAt(0).toUpperCase()
+                        )}
+                      </div>
+                    </div>
+                    <button 
+                      onClick={handleLogout} 
+                      className="bg-white/5 hover:bg-red-500 border border-white/10 p-2.5 md:px-5 md:py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all active:scale-95 shadow-sm outline-none select-none flex items-center justify-center gap-2"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+                      </svg>
+                      <span className="hidden md:block">LOGOUT</span>
+                    </button>
+                  </div>
+                </nav>
+
+                {/* Main Content Area */}
+                <main className={`flex-1 flex flex-col ${
+                  activeView === 'whiteboard' 
+                    ? 'p-0 overflow-hidden' 
+                    : 'p-4 md:p-8 overflow-y-auto overflow-x-hidden'
+                }`}>
+                  <div key={activeView} className={`${activeView === 'whiteboard' ? 'flex-1 w-full h-full' : 'flex-initial max-w-7xl mx-auto w-full'}`}>
+                      
+                      {activeView === 'admin' ? (
+                        <AdminPage triggerToast={triggerToast} />
+                      ) : activeView === 'dashboard' ? (
+                        <Dashboard 
+                          user={user} 
+                          onSelectClass={(cls) => { setSelectedClass(cls); setActiveView('detail'); }} 
+                          triggerToast={triggerToast}
+                        />
+                      ) : activeView === 'detail' ? (
+                        <ClassDetail 
+                          user={user} 
+                          classroom={selectedClass} 
+                          onBack={() => setActiveView(user.email === ADMIN_EMAIL ? 'admin' : 'dashboard')}
+                          onStartSession={() => setActiveView('whiteboard')}
+                          triggerToast={triggerToast}
+                        />
+                      ) : activeView === 'profile' ? (
+                        <Profile 
+                          user={user} 
+                          onUpdateUser={handleUpdateUser} 
+                          onBack={() => setActiveView(user.email === ADMIN_EMAIL ? 'admin' : 'dashboard')} 
+                          triggerToast={triggerToast} 
+                        />
+                      ) : activeView === 'whiteboard' ? (
+                        <div className="flex-1 flex flex-col h-full w-full bg-white overflow-hidden relative">
+                          <button 
+                            onClick={() => setActiveView('detail')} 
+                            className="fixed bottom-6 right-6 lg:absolute lg:top-6 lg:left-10 lg:bottom-auto lg:right-auto z-[60] 
+                            bg-white/90 backdrop-blur shadow-2xl border-2 border-[#001BB7]/10 px-5 py-3 rounded-2xl flex items-center 
+                            gap-2 text-[#001BB7] font-black text-xs uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95">
+                            Exit Session
+                          </button>
+                          <div className="w-full h-full">
+                              <IMUCanvas 
+                                classId={selectedClass?._id} 
+                                onSaveSuccess={handleSaveSuccess}
+                                onForceExit={handleForceExit}
+                                role={user.role}
+                                socket={socket}
+                              />
+                          </div>
+                        </div>
+                      ) : null}
+                  </div>
+                </main>
               </div>
-            ) : null}
-        </div>
-      </main>
-    </div>
+            )
+          } />
+          
+          {/* Redirect any other path to root */}
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </div>
+    </Router>
   );
 }
