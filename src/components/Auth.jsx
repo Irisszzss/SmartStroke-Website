@@ -4,6 +4,7 @@ import { api } from '../utils/api';
 import SSLogo from '../assets/SS_Logo.png';
 
 export default function Auth({ onLogin }) {
+  const [searchParams] = useSearchParams();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -83,7 +84,7 @@ export default function Auth({ onLogin }) {
 
       // --- START QR AUTO-JOIN LOGIC ---
       // We only do this on LOGIN (not registration) for students
-      const joinCode = new URLSearchParams(window.location.search).get('joinCode');
+      const joinCode = searchParams.get('joinCode');
       
       if (isLogin && userPayload.role === 'student' && joinCode) {
         try {
