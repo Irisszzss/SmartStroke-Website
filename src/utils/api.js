@@ -14,10 +14,10 @@ export const api = {
   updateProfile: (userId, data) => 
     axios.put(`${API_URL}/user/${userId}`, data),
 
-  // Ensure your backend has a route: app.post('/user/:userId/avatar', ...)
+  // FIXED: Field name changed from 'avatar' to 'profilePicture' to match backend
   uploadAvatar: (userId, file) => {
     const formData = new FormData();
-    formData.append('avatar', file); 
+    formData.append('profilePicture', file); 
     return axios.post(`${API_URL}/user/${userId}/avatar`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
