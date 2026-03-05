@@ -54,6 +54,7 @@ export default function Auth({ onLogin }) {
     };
   }, [formData, isLogin]);
 
+
   const handleSubmit = async (e) => {
   e.preventDefault();
   setError('');
@@ -74,21 +75,40 @@ export default function Auth({ onLogin }) {
           middleInitial: (formData.middleInitial || '').toUpperCase()
         });
     
-    // Check your console: does response.data.user have firstName/surname?
     console.log("Auth Response:", response.data);
 
     if (response.data && response.data.success) {
-      // Extract the full user object from the backend response
-      // If your backend puts it inside 'user', use that; otherwise fallback to the data object
       const userPayload = response.data.user || response.data;
 
+      // --- START QR AUTO-JOIN LOGIC ---
+      // We only do this on LOGIN (not registration) for students
+      const joinCode = new URLSearchParams(window.location.search).get('joinCode');
+      
+      if (isLogin && userPayload.role === 'student' && joinCode) {
+        try {
+          // Get the ID (handling both userId or _id formats)
+          const sid = userPayload.userId || userPayload._id;
+          
+          // Call the join class endpoint
+          await api.joinClass(sid, joinCode);
+          console.log(`Auto-joined class: ${joinCode}`);
+          
+          // Optional: You could add a property to userPayload here 
+          // to tell the dashboard to open this specific class immediately
+          userPayload.autoRedirectClass = joinCode; 
+        } catch (joinErr) {
+          console.error("Auto-join background task failed:", joinErr);
+          // We don't block the login if the auto-join fails, 
+          // the student can still enter the code manually.
+        }
+      }
+      // --- END QR AUTO-JOIN LOGIC ---
+
       // 2. STUDENT REGISTRATION SUCCESS (MODAL)
-      // We block auto-login here so they see the "Success" modal first
       if (!isLogin && formData.role === 'student') {
         setIsLoading(false);
         setShowSuccessModal(true); 
         setIsLogin(true);          
-        // Reset form but keep username/email if you want to pre-fill the login field
         setFormData({ 
           ...formData, 
           password: '', 
@@ -102,7 +122,6 @@ export default function Auth({ onLogin }) {
       }
 
       // 3. TEACHER REGISTRATION / PENDING APPROVAL
-      // If the backend says isApproved is false, they are blocked from logging in
       if (userPayload.isApproved === false) {
           setIsLoading(false); 
           setShowApprovalModal(true); 
@@ -115,11 +134,9 @@ export default function Auth({ onLogin }) {
       } 
 
       // 4. SUCCESSFUL LOGIN: Proceed to Dashboard
-      // IMPORTANT: Ensure userPayload contains firstName, surname, and role
       onLogin(userPayload);
     }
   } catch (err) {
-    // Catch 403: Backend blocks unapproved teacher login attempts
     if (err.response?.status === 403) {
       setError(''); 
       setShowApprovalModal(true);
@@ -183,7 +200,7 @@ export default function Auth({ onLogin }) {
                             </div>
                             <div className="col-span-2">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 text-center">MI</label>
-                                <input maxLength="1" type="text" value={formData.middleInitial} placeholder="P" className="w-full px-1 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-[#001BB7] focus:bg-white transition-all outline-none font-bold text-sm text-center uppercase" onChange={e => setFormData({...formData, middleInitial: e.target.value})} />
+                                <input maxLength="2" type="text" value={formData.middleInitial} placeholder="P" className="w-full px-1 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-[#001BB7] focus:bg-white transition-all outline-none font-bold text-sm text-center uppercase" onChange={e => setFormData({...formData, middleInitial: e.target.value})} />
                             </div>
                             <div className="col-span-5">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Surname</label>
