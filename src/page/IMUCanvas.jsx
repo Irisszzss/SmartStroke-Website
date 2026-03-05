@@ -46,51 +46,98 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
   const [baseScale, setBaseScale] = useState(1);
   const lastTouchDistance = useRef(null);
 
-  useEffect(() => {
-    if (!socket) return;
-    const handleReceiveCVPos = (pos) => { if (!isStudent) setCvPos({ x: pos.x, y: pos.y }); };
-
-    const handleReceiveStroke = (s) => {
-      if (!isStudent || s.pageIndex !== currentPageIndex) return;
-      const ctx = canvasRef.current?.getContext('2d');
-      if (!ctx) return;
-      ctx.beginPath();
-      ctx.lineWidth = 4;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = s.color;
-      ctx.moveTo(s.prevX, s.prevY);
-      ctx.lineTo(s.x, s.y);
-      ctx.stroke();
-    };
-
-    const handleReceiveAction = (act) => {
-      if (act.action === 'clear') {
-        const ctx = canvasRef.current?.getContext('2d');
-        ctx?.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
-        setPages(prev => {
-          const newPages = [...prev];
-          newPages[act.pageIndex] = [];
-          return newPages;
-        });
-      } else if (act.action === 'newPage') {
-        setPages(prev => [...prev, []]);
-        setCurrentPageIndex(act.pageIndex);
-      } else if (act.action === 'sessionEnded') {
-        onSaveSuccess?.(null); 
-      }
-    };
+  // 1. Handle Room Joining and Sync Request on Mount
+useEffect(() => {
+  if (socket && classId) {
+    // Re-register the new socket ID into the classroom room
+    socket.emit('join-session', classId);
     
-    socket.on('receive-cv-pos', handleReceiveCVPos);
-    socket.on('receive-stroke', handleReceiveStroke);
-    socket.on('receive-action', handleReceiveAction);
-    if (!isStudent) socket.emit('request-camera-sync', classId);
+    // If student joins an existing session, ask for the board state
+    if (isStudent) {
+      socket.emit('request-current-state', classId);
+    }
+  }
+}, [socket, classId, isStudent]);
 
-    return () => {
-      socket.off('receive-cv-pos');
-      socket.off('receive-stroke');
-      socket.off('receive-action');
-    };
-  }, [isStudent, socket, currentPageIndex, classId]);
+// 2. Main Socket Listeners (Strokes, Actions, and Syncing)
+useEffect(() => {
+  if (!socket) return;
+
+  const handleReceiveCVPos = (pos) => { 
+    if (isStudent) setCvPos({ x: pos.x, y: pos.y }); 
+  };
+
+  const handleReceiveStroke = (s) => {
+    if (!isStudent || s.pageIndex !== currentPageIndex) return;
+    const ctx = canvasRef.current?.getContext('2d');
+    if (!ctx) return;
+    ctx.beginPath();
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = s.color;
+    ctx.moveTo(s.prevX, s.prevY);
+    ctx.lineTo(s.x, s.y);
+    ctx.stroke();
+  };
+
+  const handleReceiveAction = (act) => {
+    if (act.action === 'clear') {
+      const ctx = canvasRef.current?.getContext('2d');
+      ctx?.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+      setPages(prev => {
+        const newPages = [...prev];
+        newPages[act.pageIndex] = [];
+        return newPages;
+      });
+    } else if (act.action === 'newPage') {
+      setPages(prev => [...prev, []]);
+      setCurrentPageIndex(act.pageIndex);
+    } else if (act.action === 'sessionEnded') {
+      onSaveSuccess?.(null); 
+    }
+  };
+
+  // --- NEW: Synchronization Logic ---
+  
+  // TEACHER SIDE: Listen for students asking for the current board
+  const handleSyncRequest = (data) => {
+    if (!isStudent) { // Only teacher responds
+      socket.emit('teacher-sends-sync', {
+        requesterId: data.requesterId,
+        pages: pages, // Send the current pages array
+        currentPageIndex: currentPageIndex
+      });
+    }
+  };
+
+  // STUDENT SIDE: Receive the full board state from the teacher
+  const handleReceiveSyncState = (data) => {
+    if (isStudent) {
+      setPages(data.pages);
+      setCurrentPageIndex(data.currentPageIndex);
+      // Optional: force a re-render of the canvas for the new page
+    }
+  };
+
+  // Register all listeners
+  socket.on('receive-cv-pos', handleReceiveCVPos);
+  socket.on('receive-stroke', handleReceiveStroke);
+  socket.on('receive-action', handleReceiveAction);
+  socket.on('teacher-sync-request', handleSyncRequest);
+  socket.on('receive-sync-state', handleReceiveSyncState);
+
+  if (!isStudent) socket.emit('request-camera-sync', classId);
+
+  return () => {
+    // Cleanup all listeners
+    socket.off('receive-cv-pos', handleReceiveCVPos);
+    socket.off('receive-stroke', handleReceiveStroke);
+    socket.off('receive-action', handleReceiveAction);
+    socket.off('teacher-sync-request', handleSyncRequest);
+    socket.off('receive-sync-state', handleReceiveSyncState);
+  };
+}, [isStudent, socket, currentPageIndex, classId, pages]); 
+// Note: 'pages' is added to dependencies so teacher always sends latest data
 
   const handleRecenter = () => {
     const { yaw, pitch } = getYawPitch(data.r, data.i, data.j, data.k);
