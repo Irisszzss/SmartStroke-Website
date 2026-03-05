@@ -86,20 +86,24 @@ export default function Auth({ onLogin }) {
       
       if (isLogin && userPayload.role === 'student' && joinCode) {
         try {
-          // Get the ID (handling both userId or _id formats)
+          // 1. Get the ID (handling both userId or _id formats)
           const sid = userPayload.userId || userPayload._id;
           
-          // Call the join class endpoint
-          await api.joinClass(sid, joinCode);
-          console.log(`Auto-joined class: ${joinCode}`);
+          // 2. CLEAN THE CODE: Remove spaces and force Uppercase
+          const cleanCode = joinCode.trim().toUpperCase();
           
-          // Optional: You could add a property to userPayload here 
-          // to tell the dashboard to open this specific class immediately
-          userPayload.autoRedirectClass = joinCode; 
+          // 3. Call the join class endpoint with the cleaned code
+          await api.joinClass(sid, cleanCode);
+          console.log(`Auto-joined class: ${cleanCode}`);
+          
+          // 4. Update payload so dashboard knows which class to highlight
+          userPayload.autoRedirectClass = cleanCode; 
+          
         } catch (joinErr) {
-          console.error("Auto-join background task failed:", joinErr);
-          // We don't block the login if the auto-join fails, 
-          // the student can still enter the code manually.
+          // If this triggers, it means the backend returned 404/500
+          console.error("Auto-join failed: Class code does not exist in database.", joinErr);
+          
+          // We don't block login, but we notify the console for debugging
         }
       }
       // --- END QR AUTO-JOIN LOGIC ---
