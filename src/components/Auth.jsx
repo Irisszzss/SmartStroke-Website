@@ -125,7 +125,7 @@ export default function Auth({ onLogin }) {
         </div>
 
         {/* AUTH CARD */}
-        <div className="bg-white/95 backdrop-blur-xl p-8 md:p-10 rounded-[48px] shadow-[0_30px_100px_rgba(0,0,0,0.06)] border border-white w-full flex-shrink-0 animate-in zoom-in-95 duration-700">
+        <div className="bg-white/95 backdrop-blur-xl pb-10 p-8 md:p-10 rounded-[48px] shadow-[0_30px_100px_rgba(0,0,0,0.06)] border border-white w-full flex-shrink-0 animate-in zoom-in-95 duration-700">
           
           <div className="mb-8">
             <h2 className="text-3xl font-black text-slate-800 tracking-tight transition-all duration-500">
