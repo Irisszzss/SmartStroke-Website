@@ -41,29 +41,39 @@ const AdminPage = ({ triggerToast }) => {
 
     const handleAction = async () => {
         const { email, action } = confirmModal;
-        setConfirmModal(prev => ({ ...prev, show: false })); // Close modal immediately
+        setConfirmModal(prev => ({ ...prev, show: false })); 
         setProcessingEmail(email);
         
         try {
-            const response = action === 'approve' 
-                ? await api.approveTeacher(email)
-                : await api.declineTeacher(email);
+            const response = await (action === 'approve' 
+                ? api.approveTeacher(email)
+                : api.declineTeacher(email));
 
+            // If the backend returns success: true
             if (response.data.success) {
                 triggerToast(response.data.message || "Action successful", "success");
-                fetchPending();
+                // This is what removes the user from the list:
+                await fetchPending(); 
             } else {
                 triggerToast(response.data.error || "Request failed", "error");
             }
         } catch (error) {
-            triggerToast("Internal Server Error occurred.", "error");
+            console.error("Full Error Object:", error);
+            
+            // CHECK THIS: If the email failed but the user WAS approved in the DB,
+            // you might still want to refresh the list.
+            const errorMessage = error.response?.data?.error || "Internal Server Error occurred.";
+            triggerToast(errorMessage, "error");
+            
+            // Refresh anyway so the UI matches the Database
+            fetchPending();
         } finally {
             setProcessingEmail(null);
         }
     };
 
     return (
-        <div className="max-w-6xl mx-auto w-full animate-in fade-in duration-500 relative">
+        <div className="max-w-6xl mx-auto w-full px-4 md:px-0 animate-in fade-in duration-500 relative">
             
             {/* Confirmation Modal */}
             {confirmModal.show && (
@@ -78,7 +88,7 @@ const AdminPage = ({ triggerToast }) => {
                             )}
                         </div>
                         <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Confirm {confirmModal.action}</h3>
-                        <p className="text-slate-500 text-sm mb-10 leading-relaxed font-medium">{confirmModal.message}</p>
+                        <p className="text-slate-500 text-sm mb-10 leading-relaxed font-medium italic">"{confirmModal.message}"</p>
                         <div className="flex flex-col gap-3">
                             <button 
                                 onClick={handleAction}
@@ -98,16 +108,12 @@ const AdminPage = ({ triggerToast }) => {
             )}
 
             {/* Header Section */}
-            <div className="mb-8">
-                <div className="flex items-center gap-4 mb-2">
-                    <h2 className="text-3xl font-black text-[#001BB7] uppercase tracking-tight">Admin Console</h2>
-                    {pendingTeachers.length > 0 && (
+            <div className="mb-8 mt-6">
+                <div className="flex flex-wrap items-center gap-4 mb-2">
                         <span className="bg-orange-500 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-lg">
                             {pendingTeachers.length} PENDING
                         </span>
-                    )}
                 </div>
-                <p className="text-slate-500 font-medium">Verification directory for educator credentials.</p>
             </div>
 
             {/* Main Card */}
@@ -115,27 +121,27 @@ const AdminPage = ({ triggerToast }) => {
                 {loading ? (
                     <div className="p-20 text-center">
                         <div className="w-12 h-12 border-4 border-[#001BB7] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                        <p className="text-slate-400 font-black text-xs tracking-widest uppercase">Synchronizing...</p>
+                        <p className="text-slate-400 font-black text-xs tracking-widest uppercase">Synchronizing Records...</p>
                     </div>
                 ) : pendingTeachers.length === 0 ? (
                     <div className="p-20 text-center">
                         <div className="bg-slate-50 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 text-slate-300">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="20 20 24 24" stroke="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                         </div>
-                        <h3 className="text-slate-800 font-black text-lg mb-1 uppercase tracking-tight">Queue is Clear!</h3>
+                        <h3 className="text-slate-800 font-black text-lg mb-1 uppercase tracking-tight">Queue is Clear</h3>
                         <p className="text-slate-400 text-sm">No pending registration requests found.</p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full border-collapse">
+                    <div className="overflow-x-auto overflow-y-hidden">
+                        <table className="w-full border-collapse min-w-[700px]">
                             <thead>
                                 <tr className="bg-[#001BB7]/5 text-[#001BB7]">
                                     <th className="px-8 py-5 text-left text-[11px] font-black uppercase tracking-[0.2em]">Educator</th>
-                                    <th className="px-8 py-5 text-left text-[11px] font-black uppercase tracking-[0.2em]">Contact Information</th>
+                                    <th className="px-8 py-5 text-left text-[11px] font-black uppercase tracking-[0.2em]">Email Address</th>
                                     <th className="px-8 py-5 text-left text-[11px] font-black uppercase tracking-[0.2em]">Username</th>
-                                    <th className="px-8 py-5 text-right text-[11px] font-black uppercase tracking-[0.2em]">Verification</th>
+                                    <th className="px-8 py-5 text-right text-[11px] font-black uppercase tracking-[0.2em]">Authorization</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -143,7 +149,7 @@ const AdminPage = ({ triggerToast }) => {
                                     <tr key={teacher.email} className="hover:bg-slate-50/50 transition-colors group">
                                         <td className="px-8 py-6">
                                             <p className="font-black text-slate-800 uppercase text-xs">{teacher.firstName} {teacher.surname}</p>
-                                            <span className="text-[9px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-black uppercase tracking-widest">Pending Approval</span>
+                                            <span className="text-[9px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-black uppercase tracking-widest">Pending</span>
                                         </td>
                                         <td className="px-8 py-6">
                                             <p className="text-sm font-bold text-slate-600">{teacher.email}</p>
@@ -156,14 +162,14 @@ const AdminPage = ({ triggerToast }) => {
                                                 <button 
                                                     disabled={processingEmail === teacher.email}
                                                     onClick={() => openConfirmModal(teacher.email, 'approve')}
-                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-[10px] font-black tracking-widest transition-all active:scale-95 disabled:opacity-50"
+                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all active:scale-95 disabled:opacity-50"
                                                 >
                                                     APPROVE
                                                 </button>
                                                 <button 
                                                     disabled={processingEmail === teacher.email}
                                                     onClick={() => openConfirmModal(teacher.email, 'decline')}
-                                                    className="bg-white border-2 border-slate-200 hover:border-red-500 hover:text-red-500 text-slate-500 px-5 py-2 rounded-xl text-[10px] font-black tracking-widest transition-all active:scale-95 disabled:opacity-50"
+                                                    className="bg-white border-2 border-slate-200 hover:border-red-500 hover:text-red-500 text-slate-500 px-5 py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all active:scale-95 disabled:opacity-50"
                                                 >
                                                     DECLINE
                                                 </button>
