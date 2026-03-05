@@ -54,9 +54,6 @@ const AdminPage = ({ triggerToast }) => {
             const response = await (action === 'approve' 
                 ? api.approveTeacher(email)
                 : api.declineTeacher(email));
-            const response = await (action === 'approve' 
-                ? api.approveTeacher(email)
-                : api.declineTeacher(email));
 
             // If the backend returns success: true
             if (response.data.success) {

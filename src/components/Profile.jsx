@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../utils/api';
 
 export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
@@ -69,7 +68,6 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
     setUploading(true);
     try {
       const res = await api.uploadAvatar(user.userId || user._id, file);
-      const res = await api.uploadAvatar(user.userId || user._id, file);
       if (res.data.success) {
         triggerToast("Profile picture updated", "success");
         onUpdateUser({ profilePicture: res.data.profilePicture });
@@ -84,7 +82,6 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
   const handleRemoveAvatar = async () => {
     setUploading(true);
     try {
-      const res = await api.deleteAvatar(user.userId || user._id);
       const res = await api.deleteAvatar(user.userId || user._id);
       if (res.data.success) {
         triggerToast("Avatar removed", "info");
@@ -110,7 +107,6 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
     setLoading(true);
     try {
       const res = await api.updateProfile(user.userId || user._id, formData);
-      const res = await api.updateProfile(user.userId || user._id, formData);
       if (res.data.success) {
         triggerToast("Profile updated successfully", "success");
         onUpdateUser(res.data);
@@ -124,10 +120,6 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
     }
   };
 
-  const avatarUrl = user?.profilePicture
-    ? (user.profilePicture.startsWith('http') 
-        ? user.profilePicture 
-        : `${API_BASE_URL}/${user.profilePicture}`)
   const avatarUrl = user?.profilePicture
     ? (user.profilePicture.startsWith('http') 
         ? user.profilePicture 
@@ -179,7 +171,6 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
               </div>
             </div>
 
-            {user?.profilePicture && isEditing && (
             {user?.profilePicture && isEditing && (
               <button
                 type="button"
