@@ -47,13 +47,18 @@ const AdminPage = ({ triggerToast }) => {
         
         const { email, action } = confirmModal;
         setConfirmModal(prev => ({ ...prev, show: false })); 
+        setConfirmModal(prev => ({ ...prev, show: false })); 
         setProcessingEmail(email);
         
         try {
             const response = await (action === 'approve' 
                 ? api.approveTeacher(email)
                 : api.declineTeacher(email));
+            const response = await (action === 'approve' 
+                ? api.approveTeacher(email)
+                : api.declineTeacher(email));
 
+            // If the backend returns success: true
             if (response.data.success) {
                 triggerToast(response.data.message || "Done!", "success");
                 await fetchPending(); 

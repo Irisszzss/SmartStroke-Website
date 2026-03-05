@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../utils/api';
 import SSLogo from '../assets/SS_Logo.png';
 
 export default function Auth({ onLogin }) {
+  const [searchParams] = useSearchParams();
   const [searchParams] = useSearchParams();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -21,6 +23,7 @@ export default function Auth({ onLogin }) {
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const handleToggleMode = () => {
@@ -49,6 +52,7 @@ export default function Auth({ onLogin }) {
       glow: isComplete ? 'rgba(16,185,129,0.3)' : 'rgba(255,128,64,0.3)'
     };
   }, [formData, isLogin]);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
