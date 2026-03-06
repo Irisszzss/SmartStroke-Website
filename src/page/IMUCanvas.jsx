@@ -40,6 +40,8 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
   const centerPos = useRef(null);
   const prevCoords = useRef(null);
   const lastNpSignal = useRef(0);
+  const lastUndoSignal = useRef(0);
+  const lastRcSignal = useRef(0);
 
   const SMOOTHING = 0.4;
   const [zoomScale, setZoomScale] = useState(1);
@@ -234,6 +236,32 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
     handleStopDraw();
   };
 
+  const handleUndo = useCallback(() => {
+    if (isStudent) return;
+
+    setPages(prev => {
+      const newPages = [...prev];
+      const currentStrokes = newPages[currentPageIndex];
+
+      if (currentStrokes && currentStrokes.length > 0) {
+        // Remove the very last stroke added to the current page
+        newPages[currentPageIndex] = currentStrokes.slice(0, -1);
+
+        // Sync the update to all students
+        socket?.emit('transmit-action', { 
+          classId, 
+          action: 'updateStrokes', 
+          pages: newPages 
+        });
+
+        triggerToast("Undo Successful");
+      } else {
+        triggerToast("Nothing to undo");
+      }
+      return newPages;
+    });
+  }, [currentPageIndex, isStudent, socket, classId]);
+
   useEffect(() => {
     if (socket && classId) {
       socket.emit('join-session', classId);
@@ -290,60 +318,195 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
   }, [socket, isStudent, onSaveSuccess, classId]);
 
   useEffect(() => {
-    if (!canvasRef.current || !isConnected || isStudent || activeTool !== 'imu') return;
-    const ctx = canvasRef.current.getContext('2d');
-    const cCtx = cursorRef.current.getContext('2d');
-    
-    const sinp = 2 * (data.r * data.j - data.k * data.i);
-    const pitch = Math.abs(sinp) >= 1 ? (Math.sign(sinp) * Math.PI) / 2 : Math.asin(sinp);
-    const yaw = Math.atan2(2 * (data.r * data.k + data.i * data.j), 1 - 2 * (data.j * data.j + data.k * data.k));
+      if (!canvasRef.current || !isConnected || isStudent || activeTool !== 'imu') return;
+      const ctx = canvasRef.current.getContext('2d');
+      const cCtx = cursorRef.current.getContext('2d');
+      
+      // --- 1. ORIENTATION CALCULATION WITH NAN PROTECTION ---
+      const sinp = 2 * (data.r * data.j - data.k * data.i);
+      
+      // FIX: Clamp sinp between -1 and 1 to prevent Math.asin(NaN) on extreme tilts
+      const clampedSinp = Math.max(-1, Math.min(1, sinp));
+      const pitch = Math.asin(clampedSinp);
 
-    if (centerPos.current === null) { centerPos.current = { yaw, pitch }; return; }
-    const dynamicSens = 250 + (Math.abs(data.j) * 150);
-    const targetX = cvPos.x - (yaw - centerPos.current.yaw) * dynamicSens;
-    const targetY = cvPos.y - (pitch - centerPos.current.pitch) * dynamicSens;
-    
-    let x = prevCoords.current ? prevCoords.current.x + (targetX - prevCoords.current.x) * SMOOTHING : targetX;
-    let y = prevCoords.current ? prevCoords.current.y + (targetY - prevCoords.current.y) * SMOOTHING : targetY;
-    x = Math.max(0, Math.min(x, BOARD_WIDTH)); y = Math.max(0, Math.min(y, BOARD_HEIGHT));
+      const yaw = Math.atan2(
+        2 * (data.r * data.k + data.i * data.j), 
+        1 - 2 * (data.j * data.j + data.k * data.k)
+      );
 
-    if (data.down) {
-      currentStrokePoints.current.push({ x, y });
-      if (prevCoords.current) {
-        ctx.beginPath(); ctx.lineWidth = 4; ctx.strokeStyle = selectedColor; ctx.lineCap = 'round';
-        ctx.moveTo(prevCoords.current.x, prevCoords.current.y); ctx.lineTo(x, y); ctx.stroke();
-        socket?.emit('transmit-stroke', { classId, x, y, prevX: prevCoords.current.x, prevY: prevCoords.current.y, color: selectedColor, pageIndex: currentPageIndex });
+      // --- 2. CENTER CALIBRATION ---
+      if (centerPos.current === null) { 
+        centerPos.current = { yaw, pitch }; 
+        return; 
       }
-      prevCoords.current = { x, y };
-    } else if (currentStrokePoints.current.length > 0) {
-      setPages(prev => {
-        const n = [...prev];
-        n[currentPageIndex] = [...(n[currentPageIndex] || []), { points: [...currentStrokePoints.current], color: selectedColor }];
-        return n;
-      });
-      currentStrokePoints.current = [];
-      prevCoords.current = null;
-    }
-    cCtx.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
-    cCtx.beginPath(); cCtx.arc(x, y, 6, 0, Math.PI * 2);
-    cCtx.fillStyle = data.down ? selectedColor : '#FF8040';
-    cCtx.fill(); cCtx.strokeStyle = 'white'; cCtx.lineWidth = 2; cCtx.stroke();
+      
+      // --- 3. DYNAMIC SENSITIVITY STABILIZATION ---
+      // Reduced the multiplier on J-axis tilt to prevent the cursor from jumping
+      // when you tilt the pen significantly.
+      const dynamicSens = 250 + (Math.abs(data.j) * 80); 
+      
+      const targetX = cvPos.x - (yaw - centerPos.current.yaw) * dynamicSens;
+      const targetY = cvPos.y - (pitch - centerPos.current.pitch) * dynamicSens;
+      
+      // Smooth the movement to prevent jitter during high-tilt transitions
+      let x = prevCoords.current ? prevCoords.current.x + (targetX - prevCoords.current.x) * SMOOTHING : targetX;
+      let y = prevCoords.current ? prevCoords.current.y + (targetY - prevCoords.current.y) * SMOOTHING : targetY;
+      
+      // Clamp to board boundaries
+      x = Math.max(0, Math.min(x, BOARD_WIDTH)); 
+      y = Math.max(0, Math.min(y, BOARD_HEIGHT));
+
+      // --- 4. DRAWING & SYNC LOGIC ---
+      if (data.down) {
+        currentStrokePoints.current.push({ x, y });
+        if (prevCoords.current) {
+          ctx.beginPath();
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = selectedColor;
+          ctx.lineCap = 'round';
+          ctx.moveTo(prevCoords.current.x, prevCoords.current.y);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+          
+          socket?.emit('transmit-stroke', { 
+            classId, x, y, 
+            prevX: prevCoords.current.x, 
+            prevY: prevCoords.current.y, 
+            color: selectedColor, 
+            pageIndex: currentPageIndex 
+          });
+        }
+        prevCoords.current = { x, y };
+      } else {
+        // Handle completion of a stroke
+        if (currentStrokePoints.current.length > 0) {
+          const newStroke = { points: [...currentStrokePoints.current], color: selectedColor };
+          setPages(prev => {
+            const n = [...prev];
+            n[currentPageIndex] = [...(n[currentPageIndex] || []), newStroke];
+            return n;
+          });
+
+          socket?.emit('transmit-action', { 
+            classId, 
+            action: 'updateStrokes', 
+            pages: [...pagesRef.current.slice(0, currentPageIndex), [...(pagesRef.current[currentPageIndex] || []), newStroke], ...pagesRef.current.slice(currentPageIndex + 1)] 
+          });
+          
+          currentStrokePoints.current = [];
+        }
+        // Keep tracking the cursor movement even when not drawing
+        prevCoords.current = { x, y }; 
+      }
+
+      // --- 5. CURSOR RENDERING ---
+      cCtx.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+      cCtx.beginPath();
+      cCtx.arc(x, y, 6, 0, Math.PI * 2);
+      // Use orange for hover, selectedColor for active writing
+      cCtx.fillStyle = data.down ? selectedColor : '#FF8040';
+      cCtx.fill();
+      cCtx.strokeStyle = 'white';
+      cCtx.lineWidth = 2;
+      cCtx.stroke();
+
   }, [data, cvPos, isConnected, activeTool, selectedColor, classId, socket, currentPageIndex]);
 
   const connectBLE = async () => {
-    if (!navigator.bluetooth) { triggerToast("Bluetooth not supported"); return; }
+    if (!navigator.bluetooth) {
+      triggerToast("Bluetooth not supported");
+      return;
+    }
+
     try {
-      const device = await navigator.bluetooth.requestDevice({ filters: [{ name: 'SmartStrokes-Pen' }], optionalServices: [SERVICE_UUID] });
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ name: 'SmartStrokes-Pen' }],
+        optionalServices: [SERVICE_UUID]
+      });
+
       const server = await device.gatt.connect();
-      const char = await (await server.getPrimaryService(SERVICE_UUID)).getCharacteristic(CHARACTERISTIC_UUID);
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      const char = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
       await char.startNotifications();
+
       char.addEventListener('characteristicvaluechanged', (e) => {
         const p = JSON.parse(new TextDecoder().decode(e.target.value));
-        if (p.pdf === 1) generatePreview();
+
+        // --- 1. HANDLE NEW PAGE SIGNAL (p.np) ---
+        if (p.np === 1 && lastNpSignal.current !== 1) {
+          if (!isStudent) {
+            setPages(prev => {
+              const nextPages = [...prev, []];
+              const newIndex = nextPages.length - 1;
+              
+              setCurrentPageIndex(newIndex);
+              
+              socket?.emit('transmit-action', {
+                classId,
+                action: 'newPage',
+                pageIndex: newIndex
+              });
+              return nextPages;
+            });
+            triggerToast("New Page Created");
+          }
+        }
+        lastNpSignal.current = p.np;
+
+        // --- 2. HANDLE UNDO SIGNAL (p.un) ---
+        if (p.un === 1 && lastUndoSignal.current !== 1) {
+          if (!isStudent) {
+            setPages(prev => {
+              const newPages = [...prev];
+              // Uses the Ref to ensure we undo on the correct page even if state is stale
+              const activeIndex = currentIndexRef.current; 
+              const currentStrokes = newPages[activeIndex] || [];
+              
+              if (currentStrokes.length > 0) {
+                newPages[activeIndex] = currentStrokes.slice(0, -1);
+                
+                socket?.emit('transmit-action', { 
+                  classId, 
+                  action: 'updateStrokes', 
+                  pages: newPages 
+                });
+                triggerToast(`Undo on Page ${activeIndex + 1}`);
+              } else {
+                triggerToast("Nothing to undo");
+              }
+              return newPages;
+            });
+          }
+        }
+        lastUndoSignal.current = p.un;
+
+        // --- 3. HANDLE RECENTER SIGNAL (p.rc) ---
+        // Resetting centerPos.current to null forces the IMU useEffect to 
+        // calibrate its zero-point to the current CV cursor position.
+        if (p.rc === 1 && lastRcSignal.current !== 1) {
+          centerPos.current = null; 
+          triggerToast("Sensor Synced to CV");
+        }
+        lastRcSignal.current = p.rc;
+
+        // --- 4. HANDLE EXPORT/PDF SIGNAL (p.pdf) ---
+        if (p.pdf === 1) {
+          generatePreview();
+        }
+
+        // --- 5. UPDATE SENSOR DATA ---
         setData({ ...p, down: p.d === 1 || p.d === true });
       });
-      setIsConnected(true); bleDevice.current = device;
-    } catch { triggerToast("Connection failed"); }
+
+      setIsConnected(true);
+      bleDevice.current = device;
+      triggerToast("Pen Connected");
+
+    } catch (error) {
+      console.error("BLE Error:", error);
+      triggerToast("Connection failed");
+    }
   };
 
   const finalizeDownload = async () => {
