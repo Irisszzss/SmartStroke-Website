@@ -130,9 +130,9 @@ export default function Dashboard({ user, onSelectClass, triggerToast }) {
              <div className="bg-white w-28 h-28 rounded-[40px] flex items-center justify-center mb-8 shadow-[0_20px_40px_rgba(0,0,0,0.04)]">
                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-200"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
              </div>
-             <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-[11px]">No traces found in your system</p>
+             <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-[11px]">No classroom found</p>
              <button onClick={() => setModalOpen(true)} className="mt-6 text-[#001BB7] font-black hover:text-[#FF8040] transition-colors uppercase text-xs tracking-widest underline underline-offset-8 decoration-[#001BB7]/20">
-                {user?.role === 'teacher' ? 'Initialize First Classroom' : 'Connect to a Session'}
+                {user?.role === 'teacher' ? 'Create your First Classroom' : 'Join a Class'}
              </button>
           </div>
         )}

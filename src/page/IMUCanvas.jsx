@@ -281,41 +281,106 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
   }, [socket, classId, isStudent]);
 
   useEffect(() => {
-    if (!socket) return;
-    socket.on('receive-cv-pos', (pos) => setCvPos({ x: pos.x, y: pos.y }));
-    socket.on('receive-stroke', (s) => {
-      if (s.pageIndex !== currentIndexRef.current) return;
+  if (!socket) return;
+
+  socket.on('receive-cv-pos', (pos) => setCvPos({ x: pos.x, y: pos.y }));
+
+  socket.on('receive-stroke', (s) => {
+    // 1. Instant Draw: Draw to canvas immediately for smooth real-time viewing
+    if (s.pageIndex === currentIndexRef.current) {
       const ctx = canvasRef.current?.getContext('2d');
-      if (!ctx) return;
-      ctx.beginPath(); ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.strokeStyle = s.color;
-      ctx.moveTo(s.prevX, s.prevY); ctx.lineTo(s.x, s.y); ctx.stroke();
-    });
-    socket.on('receive-action', (act) => {
-      if (act.action === 'clear') {
-        setPages(prev => { const n = [...prev]; n[act.pageIndex] = []; return n; });
+      if (ctx) {
+        ctx.beginPath(); 
+        ctx.lineWidth = 4; 
+        ctx.lineCap = 'round'; 
+        ctx.strokeStyle = s.color;
+        ctx.moveTo(s.prevX, s.prevY); 
+        ctx.lineTo(s.x, s.y); 
+        ctx.stroke();
+      }
+    }
+
+    // 2. Persist to State: Save the points so they stay when switching pages
+    if (isStudent) {
+      setPages(prev => {
+        const newPages = [...prev];
+        // Ensure the page exists in the array
+        if (!newPages[s.pageIndex]) {
+          while (newPages.length <= s.pageIndex) newPages.push([]);
+        }
+
+        const currentStrokes = newPages[s.pageIndex];
+        const lastStroke = currentStrokes[currentStrokes.length - 1];
+
+        // LOGIC: If this segment connects to the previous one, append it.
+        // Otherwise, it's a new "pen down" event from the teacher.
+        if (lastStroke && 
+            lastStroke.color === s.color && 
+            lastStroke.points[lastStroke.points.length - 1].x === s.prevX &&
+            lastStroke.points[lastStroke.points.length - 1].y === s.prevY) {
+          lastStroke.points.push({ x: s.x, y: s.y });
+        } else {
+          newPages[s.pageIndex].push({
+            points: [{ x: s.prevX, y: s.prevY }, { x: s.x, y: s.y }],
+            color: s.color
+          });
+        }
+        return newPages;
+      });
+    }
+  });
+
+  socket.on('receive-action', (act) => {
+    if (act.action === 'clear') {
+      setPages(prev => { 
+        const n = [...prev]; 
+        if (n[act.pageIndex]) n[act.pageIndex] = []; 
+        return n; 
+      });
+      // Clear canvas if student is currently on that page
+      if (act.pageIndex === currentIndexRef.current) {
         canvasRef.current?.getContext('2d')?.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
-      } else if (act.action === 'newPage') {
-        setPages(prev => [...prev, []]);
-        setCurrentPageIndex(act.pageIndex);
-      } else if (act.action === 'updateStrokes') {
-        setPages(act.pages);
-      } else if (act.action === 'sessionEnded') {
-        onSaveSuccess?.(null);
       }
-    });
-    socket.on('teacher-sync-request', (req) => {
-      if (!isStudent) {
-        socket.emit('teacher-sends-sync', { requesterId: req.requesterId, pages: pagesRef.current, currentPageIndex: currentIndexRef.current });
-      }
-    });
-    socket.on('receive-sync-state', (syncData) => {
-      if (isStudent) {
-        setPages(syncData.pages);
-        setCurrentPageIndex(syncData.currentPageIndex);
-      }
-    });
-    return () => socket.off();
-  }, [socket, isStudent, onSaveSuccess, classId]);
+    } else if (act.action === 'newPage') {
+      // FIX: Ensure pages array is long enough to reach act.pageIndex
+      setPages(prev => {
+        const n = [...prev];
+        while (n.length <= act.pageIndex) n.push([]);
+        return n;
+      });
+      setCurrentPageIndex(act.pageIndex);
+    } else if (act.action === 'updateStrokes') {
+      setPages(act.pages);
+    } else if (act.action === 'sessionEnded') {
+      onSaveSuccess?.(null);
+    }
+  });
+
+  socket.on('teacher-sync-request', (req) => {
+    if (!isStudent) {
+      socket.emit('teacher-sends-sync', { 
+        requesterId: req.requesterId, 
+        pages: pagesRef.current, 
+        currentPageIndex: currentIndexRef.current 
+      });
+    }
+  });
+
+  socket.on('receive-sync-state', (syncData) => {
+    if (isStudent) {
+      setPages(syncData.pages);
+      setCurrentPageIndex(syncData.currentPageIndex);
+    }
+  });
+
+  return () => {
+    socket.off('receive-cv-pos');
+    socket.off('receive-stroke');
+    socket.off('receive-action');
+    socket.off('teacher-sync-request');
+    socket.off('receive-sync-state');
+  };
+}, [socket, isStudent, onSaveSuccess, classId]);
 
   useEffect(() => {
       if (!canvasRef.current || !isConnected || isStudent || activeTool !== 'imu') return;
@@ -581,11 +646,36 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
           </div>
 
           <div className="p-4 lg:p-3 bg-white border-b border-slate-100 space-y-3 sticky top-[72px] lg:top-[88px] z-20 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <button onClick={() => setCurrentPageIndex(p => Math.max(0, p-1))} className="w-10 h-10 lg:w-12 lg:h-12 rounded-2xl border border-slate-100 bg-white font-black hover:bg-slate-50 transition-colors">←</button>
-              <span className="text-md lg:text-lg font-black text-slate-800">{currentPageIndex + 1}/{pages.length}</span>
-              <button onClick={() => setCurrentPageIndex(p => Math.min(pages.length-1, p+1))} className="w-10 h-10 lg:w-12 lg:h-12 rounded-2xl border border-slate-100 bg-white font-black hover:bg-slate-50 transition-colors">→</button>
-            </div>
+            {/* Updated Navigation Controls */}
+<div className="flex items-center justify-between mb-2">
+  <button 
+    onClick={() => {
+      const newIdx = Math.max(0, currentPageIndex - 1);
+      setCurrentPageIndex(newIdx);
+      // Notify students to switch to this page
+      socket?.emit('transmit-action', { classId, action: 'newPage', pageIndex: newIdx });
+    }} 
+    className="w-10 h-10 lg:w-12 lg:h-12 rounded-2xl border border-slate-100 bg-white font-black hover:bg-slate-50 transition-colors"
+  >
+    ←
+  </button>
+  
+  <span className="text-md lg:text-lg font-black text-slate-800">
+    {currentPageIndex + 1}/{pages.length}
+  </span>
+  
+  <button 
+    onClick={() => {
+      const newIdx = Math.min(pages.length - 1, currentPageIndex + 1);
+      setCurrentPageIndex(newIdx);
+      // Notify students to switch to this page
+      socket?.emit('transmit-action', { classId, action: 'newPage', pageIndex: newIdx });
+    }} 
+    className="w-10 h-10 lg:w-12 lg:h-12 rounded-2xl border border-slate-100 bg-white font-black hover:bg-slate-50 transition-colors"
+  >
+    →
+  </button>
+</div>
             <div className="flex gap-2">
               <button onClick={createNewPage} className="flex-1 p-3 lg:p-4 rounded-2xl bg-slate-900 text-white font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all">+ Page</button>
               <button onClick={generatePreview} className="flex-1 p-3 lg:p-4 rounded-2xl bg-[#001BB7] text-white font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-900/20">Export</button>
