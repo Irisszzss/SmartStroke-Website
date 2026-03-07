@@ -24,7 +24,7 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
   const [activeTool, setActiveTool] = useState('imu'); 
-  const [selectedStrokeIdx, setSelectedStrokeIdx] = useState(null);
+  const [selectedStrokeIdxs, setSelectedStrokeIdxs] = useState([]);
   const [isMouseDrawing, setIsMouseDrawing] = useState(false);
   const [isDraggingStroke, setIsDraggingStroke] = useState(false);
 
@@ -51,6 +51,10 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
   const [baseScale, setBaseScale] = useState(1);
 
+  const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
+  const [marqueeStart, setMarqueeStart] = useState({ x: 0, y: 0 });
+  const [marqueeEnd, setMarqueeEnd] = useState({ x: 0, y: 0 });
+
   // --- REFS FOR SOCKET SYNC STABILITY ---
   const pagesRef = useRef(pages);
   const currentIndexRef = useRef(currentPageIndex);
@@ -70,72 +74,111 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
     const currentStrokes = pages[currentPageIndex] || [];
     currentStrokes.forEach((stroke, idx) => {
       if (!stroke.points || stroke.points.length < 2) return;
+
       ctx.beginPath();
-      const isSelected = selectedStrokeIdx === idx && activeTool === 'select';
+      // Check if this specific index is in our multiselect array
+      const isSelected = selectedStrokeIdxs.includes(idx) && activeTool === 'select';
       ctx.strokeStyle = isSelected ? '#22c55e' : stroke.color;
+
       if (isSelected) {
         ctx.shadowBlur = 15;
         ctx.shadowColor = '#22c55e';
       }
+
+      // Drawing logic (including the smooth curves from before)
       ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-      for (let i = 1; i < stroke.points.length; i++) {
-        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+      if (stroke.points.length === 2) {
+        ctx.lineTo(stroke.points[1].x, stroke.points[1].y);
+      } else {
+        let i;
+        for (i = 1; i < stroke.points.length - 1; i++) {
+          const midX = (stroke.points[i].x + stroke.points[i + 1].x) / 2;
+          const midY = (stroke.points[i].y + stroke.points[i + 1].y) / 2;
+          ctx.quadraticCurveTo(stroke.points[i].x, stroke.points[i].y, midX, midY);
+        }
+        ctx.lineTo(stroke.points[stroke.points.length - 1].x, stroke.points[stroke.points.length - 1].y);
       }
       ctx.stroke();
       ctx.shadowBlur = 0;
     });
-  }, [pages, currentPageIndex, selectedStrokeIdx, activeTool]);
-
-  useEffect(() => { redrawCanvas(); }, [redrawCanvas]);
+  }, [pages, currentPageIndex, selectedStrokeIdxs, activeTool]);
 
   const handleColorUpdate = (color) => {
     setSelectedColor(color);
-    if (selectedStrokeIdx !== null && activeTool === 'select') {
+    if (selectedStrokeIdxs.length > 0 && activeTool === 'select') {
       const newPages = [...pages];
-      newPages[currentPageIndex][selectedStrokeIdx].color = color;
+      
+      // Apply color to all selected strokes
+      selectedStrokeIdxs.forEach(idx => {
+        if (newPages[currentPageIndex][idx]) {
+          newPages[currentPageIndex][idx].color = color;
+        }
+      });
+
       setPages(newPages);
       socket?.emit('transmit-action', { classId, action: 'updateStrokes', pages: newPages });
-      triggerToast("Stroke Color Updated");
+      triggerToast(`${selectedStrokeIdxs.length} Strokes Updated`);
     }
   };
 
   const deleteSelected = () => {
-    if (selectedStrokeIdx === null) return;
+    if (selectedStrokeIdxs.length === 0) return;
+    
     const newPages = [...pages];
-    newPages[currentPageIndex].splice(selectedStrokeIdx, 1);
+    // Keep only the strokes whose index is NOT in the selectedStrokeIdxs array
+    newPages[currentPageIndex] = newPages[currentPageIndex].filter(
+      (_, index) => !selectedStrokeIdxs.includes(index)
+    );
+
     setPages(newPages);
-    setSelectedStrokeIdx(null);
+    setSelectedStrokeIdxs([]); // Clear selection after deleting
     socket?.emit('transmit-action', { classId, action: 'updateStrokes', pages: newPages });
-    triggerToast("Stroke Deleted");
+    triggerToast("Selection Deleted");
   };
 
   const handleStartDraw = (e) => {
-    // FIX: Allow students to pan the board
-    if (isStudent && (activeTool === 'pen' || activeTool === 'eraser' || activeTool === 'select')) return;
+      if (isStudent && (activeTool === 'pen' || activeTool === 'eraser' || activeTool === 'select')) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
-    const coords = {
-      x: (clientX - rect.left) / (baseScale * zoomScale),
-      y: (clientY - rect.top) / (baseScale * zoomScale)
+      const coords = {
+        x: (clientX - rect.left) / (baseScale * zoomScale),
+        y: (clientY - rect.top) / (baseScale * zoomScale)
+      };
+
+      if (activeTool === 'select') {
+        const hitIndex = pageStrokesHitTest(coords);
+        
+        // If we hit an already selected stroke, start dragging the group
+        if (hitIndex !== -1 && selectedStrokeIdxs.includes(hitIndex)) {
+          setIsDraggingStroke(true);
+          setLastMousePos(coords);
+        } 
+        // If we hit nothing, start a marquee selection box
+        else if (hitIndex === -1) {
+          setIsMarqueeSelecting(true);
+          setMarqueeStart(coords);
+          setMarqueeEnd(coords);
+          // Clear selection if Shift is not held
+          if (!e.shiftKey) setSelectedStrokeIdxs([]);
+        } 
+        // If we hit a new stroke (not currently selected), select it
+        else {
+          handleHitDetection(coords, e.shiftKey);
+        }
+      } else if (activeTool === 'pen') {
+        setIsMouseDrawing(true);
+        prevCoords.current = coords;
+        currentStrokePoints.current = [coords];
+      } else if (activeTool === 'eraser') {
+        handleHitDetection(coords);
+      } else {
+        setIsPanning(true);
+        setLastMousePos({ x: clientX, y: clientY });
+      }
     };
-
-    if (activeTool === 'select' && selectedStrokeIdx !== null) {
-      setIsDraggingStroke(true);
-      setLastMousePos(coords);
-    } else if (activeTool === 'pen') {
-      setIsMouseDrawing(true);
-      prevCoords.current = coords;
-      currentStrokePoints.current = [coords];
-    } else if (activeTool === 'eraser' || activeTool === 'select') {
-      handleHitDetection(coords);
-    } else {
-      setIsPanning(true);
-      setLastMousePos({ x: clientX, y: clientY });
-    }
-  };
 
   const handleDrawingMove = (e) => {
     if (isStudent && !isPanning) return;
@@ -149,33 +192,73 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
       y: (clientY - rect.top) / (baseScale * zoomScale)
     };
 
-    if (isDraggingStroke && selectedStrokeIdx !== null) {
+    if (isMarqueeSelecting) {
+      setMarqueeEnd(coords);
+    } else if (isDraggingStroke && selectedStrokeIdxs.length > 0) {
       const dx = coords.x - lastMousePos.x;
       const dy = coords.y - lastMousePos.y;
+      
       const newPages = [...pages];
-      newPages[currentPageIndex][selectedStrokeIdx].points = newPages[currentPageIndex][selectedStrokeIdx].points.map(p => ({
-        x: p.x + dx,
-        y: p.y + dy
-      }));
+      selectedStrokeIdxs.forEach(idx => {
+        if (newPages[currentPageIndex][idx]) {
+          newPages[currentPageIndex][idx].points = newPages[currentPageIndex][idx].points.map(p => ({
+            x: p.x + dx,
+            y: p.y + dy
+          }));
+        }
+      });
+      
       setPages(newPages);
       setLastMousePos(coords);
     } else if (isMouseDrawing) {
       const ctx = canvasRef.current.getContext('2d');
-      ctx.beginPath(); ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.strokeStyle = selectedColor;
-      ctx.moveTo(prevCoords.current.x, prevCoords.current.y); ctx.lineTo(coords.x, coords.y); ctx.stroke();
+      ctx.beginPath(); 
+      ctx.lineWidth = 4; 
+      ctx.lineCap = 'round'; 
+      ctx.strokeStyle = selectedColor;
+      ctx.moveTo(prevCoords.current.x, prevCoords.current.y); 
+      ctx.lineTo(coords.x, coords.y); 
+      ctx.stroke();
       
-      // FIX: TRANSMIT STROKE FOR REAL-TIME
-      socket?.emit('transmit-stroke', { classId, x: coords.x, y: coords.y, prevX: prevCoords.current.x, prevY: prevCoords.current.y, color: selectedColor, pageIndex: currentPageIndex });
+      socket?.emit('transmit-stroke', { 
+        classId, x: coords.x, y: coords.y, 
+        prevX: prevCoords.current.x, prevY: prevCoords.current.y, 
+        color: selectedColor, pageIndex: currentPageIndex 
+      });
 
       currentStrokePoints.current.push(coords);
       prevCoords.current = coords;
     } else if (isPanning) {
-      setOffset(prev => ({ x: prev.x + (clientX - lastMousePos.x), y: prev.y + (clientY - lastMousePos.y) }));
+      setOffset(prev => ({ 
+        x: prev.x + (clientX - lastMousePos.x), 
+        y: prev.y + (clientY - lastMousePos.y) 
+      }));
       setLastMousePos({ x: clientX, y: clientY });
     }
   };
 
   const handleStopDraw = () => {
+    if (isMarqueeSelecting) {
+      const minX = Math.min(marqueeStart.x, marqueeEnd.x);
+      const maxX = Math.max(marqueeStart.x, marqueeEnd.x);
+      const minY = Math.min(marqueeStart.y, marqueeEnd.y);
+      const maxY = Math.max(marqueeStart.y, marqueeEnd.y);
+
+      const currentStrokes = pages[currentPageIndex] || [];
+      const newlySelected = [];
+
+      currentStrokes.forEach((stroke, sIdx) => {
+        // Logic: If any point of the stroke is inside the rectangle, select it
+        const isInside = stroke.points.some(p => 
+          p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY
+        );
+        if (isInside) newlySelected.push(sIdx);
+      });
+
+      setSelectedStrokeIdxs(prev => [...new Set([...prev, ...newlySelected])]);
+      setIsMarqueeSelecting(false);
+    }
+
     if (isMouseDrawing) {
       const newStroke = { points: [...currentStrokePoints.current], color: selectedColor };
       setPages(prev => {
@@ -186,22 +269,30 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
       currentStrokePoints.current = [];
       setIsMouseDrawing(false);
     }
+
     if (isDraggingStroke) {
-        socket?.emit('transmit-action', { classId, action: 'updateStrokes', pages: pages });
+      socket?.emit('transmit-action', { classId, action: 'updateStrokes', pages: pages });
     }
+
     setIsDraggingStroke(false);
     setIsPanning(false);
   };
 
-  const handleHitDetection = (coords) => {
-    const pageStrokes = pages[currentPageIndex];
+  // Helper for reused hit logic
+  const pageStrokesHitTest = (coords) => {
+    const pageStrokes = pages[currentPageIndex] || [];
     let hitIndex = -1;
     pageStrokes.forEach((stroke, sIdx) => {
       stroke.points.forEach(p => {
-        const dist = Math.sqrt((p.x - coords.x)**2 + (p.y - coords.y)**2);
+        const dist = Math.sqrt((p.x - coords.x) ** 2 + (p.y - coords.y) ** 2);
         if (dist < 40) hitIndex = sIdx;
       });
     });
+    return hitIndex;
+  };
+
+  const handleHitDetection = (coords, isShiftKey = false) => {
+    const hitIndex = pageStrokesHitTest(coords);
 
     if (hitIndex !== -1) {
       if (activeTool === 'eraser') {
@@ -210,10 +301,17 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
         setPages(newPages);
         socket?.emit('transmit-action', { classId, action: 'updateStrokes', pages: newPages });
       } else {
-        setSelectedStrokeIdx(hitIndex);
+        setSelectedStrokeIdxs(prev => {
+          if (isShiftKey) {
+            return prev.includes(hitIndex) 
+              ? prev.filter(i => i !== hitIndex) 
+              : [...prev, hitIndex];
+          }
+          return [hitIndex];
+        });
       }
     } else {
-      setSelectedStrokeIdx(null);
+      if (!isShiftKey) setSelectedStrokeIdxs([]);
     }
   };
 
@@ -383,196 +481,217 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
 }, [socket, isStudent, onSaveSuccess, classId]);
 
   useEffect(() => {
-      if (!canvasRef.current || !isConnected || isStudent || activeTool !== 'imu') return;
-      const ctx = canvasRef.current.getContext('2d');
-      const cCtx = cursorRef.current.getContext('2d');
-      
-      // --- 1. ORIENTATION CALCULATION WITH NAN PROTECTION ---
-      const sinp = 2 * (data.r * data.j - data.k * data.i);
-      
-      // FIX: Clamp sinp between -1 and 1 to prevent Math.asin(NaN) on extreme tilts
-      const clampedSinp = Math.max(-1, Math.min(1, sinp));
-      const pitch = Math.asin(clampedSinp);
+    if (!canvasRef.current || !cursorRef.current || !isConnected || isStudent || activeTool !== 'imu') return;
+    
+    const ctx = canvasRef.current.getContext('2d');
+    const cCtx = cursorRef.current.getContext('2d');
+    
+    // --- 1. ORIENTATION CALCULATION WITH NAN PROTECTION ---
+    const sinp = 2 * (data.r * data.j - data.k * data.i);
+    const clampedSinp = Math.max(-1, Math.min(1, sinp));
+    const pitch = Math.asin(clampedSinp);
 
-      const yaw = Math.atan2(
+    const yaw = Math.atan2(
         2 * (data.r * data.k + data.i * data.j), 
         1 - 2 * (data.j * data.j + data.k * data.k)
-      );
+    );
 
-      // --- 2. CENTER CALIBRATION ---
-      if (centerPos.current === null) { 
+    // --- 2. CENTER CALIBRATION ---
+    // This anchors the IMU "zero" to the current ArUco position (cvPos)
+    if (centerPos.current === null) { 
         centerPos.current = { yaw, pitch }; 
+        prevCoords.current = { x: cvPos.x, y: cvPos.y }; // Initialize prevCoords to prevent jumps
         return; 
-      }
-      
-      // --- 3. DYNAMIC SENSITIVITY STABILIZATION ---
-      // Reduced the multiplier on J-axis tilt to prevent the cursor from jumping
-      // when you tilt the pen significantly.
-      const dynamicSens = 250 + (Math.abs(data.j) * 80); 
-      
-      const targetX = cvPos.x - (yaw - centerPos.current.yaw) * dynamicSens;
-      const targetY = cvPos.y - (pitch - centerPos.current.pitch) * dynamicSens;
-      
-      // Smooth the movement to prevent jitter during high-tilt transitions
-      let x = prevCoords.current ? prevCoords.current.x + (targetX - prevCoords.current.x) * SMOOTHING : targetX;
-      let y = prevCoords.current ? prevCoords.current.y + (targetY - prevCoords.current.y) * SMOOTHING : targetY;
-      
-      // Clamp to board boundaries
-      x = Math.max(0, Math.min(x, BOARD_WIDTH)); 
-      y = Math.max(0, Math.min(y, BOARD_HEIGHT));
-
-      // --- 4. DRAWING & SYNC LOGIC ---
-      if (data.down) {
-        currentStrokePoints.current.push({ x, y });
-        if (prevCoords.current) {
-          ctx.beginPath();
-          ctx.lineWidth = 4;
-          ctx.strokeStyle = selectedColor;
-          ctx.lineCap = 'round';
-          ctx.moveTo(prevCoords.current.x, prevCoords.current.y);
-          ctx.lineTo(x, y);
-          ctx.stroke();
-          
-          socket?.emit('transmit-stroke', { 
-            classId, x, y, 
-            prevX: prevCoords.current.x, 
-            prevY: prevCoords.current.y, 
-            color: selectedColor, 
-            pageIndex: currentPageIndex 
-          });
-        }
-        prevCoords.current = { x, y };
-      } else {
-        // Handle completion of a stroke
-        if (currentStrokePoints.current.length > 0) {
-          const newStroke = { points: [...currentStrokePoints.current], color: selectedColor };
-          setPages(prev => {
-            const n = [...prev];
-            n[currentPageIndex] = [...(n[currentPageIndex] || []), newStroke];
-            return n;
-          });
-
-          socket?.emit('transmit-action', { 
-            classId, 
-            action: 'updateStrokes', 
-            pages: [...pagesRef.current.slice(0, currentPageIndex), [...(pagesRef.current[currentPageIndex] || []), newStroke], ...pagesRef.current.slice(currentPageIndex + 1)] 
-          });
-          
-          currentStrokePoints.current = [];
-        }
-        // Keep tracking the cursor movement even when not drawing
-        prevCoords.current = { x, y }; 
-      }
-
-      // --- 5. CURSOR RENDERING ---
-      cCtx.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
-      cCtx.beginPath();
-      cCtx.arc(x, y, 6, 0, Math.PI * 2);
-      // Use orange for hover, selectedColor for active writing
-      cCtx.fillStyle = data.down ? selectedColor : '#FF8040';
-      cCtx.fill();
-      cCtx.strokeStyle = 'white';
-      cCtx.lineWidth = 2;
-      cCtx.stroke();
-
-  }, [data, cvPos, isConnected, activeTool, selectedColor, classId, socket, currentPageIndex]);
-
-  const connectBLE = async () => {
-    if (!navigator.bluetooth) {
-      triggerToast("Bluetooth not supported");
-      return;
     }
+    
+    // --- 3. DYNAMIC SENSITIVITY & COORDINATE CALCULATION ---
+    // dynamicSens maps angular tilt to canvas pixels. 
+    const dynamicSens = 250 + (Math.abs(data.j) * 80); 
+    
+    // The core fix: target = (Physical Marker Position) - (Angular Offset)
+    const targetX = cvPos.x - (yaw - centerPos.current.yaw) * dynamicSens;
+    const targetY = cvPos.y - (pitch - centerPos.current.pitch) * dynamicSens;
 
+    // --- 4. SMOOTHING & CLAMPING ---
+    // Apply smoothing to the raw target to filter out IMU jitter
+    let x = prevCoords.current 
+        ? prevCoords.current.x + (targetX - prevCoords.current.x) * SMOOTHING 
+        : targetX;
+    let y = prevCoords.current 
+        ? prevCoords.current.y + (targetY - prevCoords.current.y) * SMOOTHING 
+        : targetY;
+
+    // Strict clamping to the logical board dimensions (2440x1170)
+    x = Math.max(0, Math.min(x, BOARD_WIDTH));
+    y = Math.max(0, Math.min(y, BOARD_HEIGHT));
+
+    // --- 5. DRAWING & SYNC LOGIC ---
+    if (data.down) {
+        currentStrokePoints.current.push({ x, y });
+        
+        // Only draw if we have a valid previous point and it's not the first point of a stroke
+        if (prevCoords.current && currentStrokePoints.current.length > 1) {
+            ctx.beginPath();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = selectedColor;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.moveTo(prevCoords.current.x, prevCoords.current.y);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            
+            socket?.emit('transmit-stroke', { 
+                classId, 
+                x, 
+                y, 
+                prevX: prevCoords.current.x, 
+                prevY: prevCoords.current.y, 
+                color: selectedColor, 
+                pageIndex: currentPageIndex 
+            });
+        }
+    } else {
+        // Finalize stroke when pen is lifted
+        if (currentStrokePoints.current.length > 0) {
+            const newStroke = { points: [...currentStrokePoints.current], color: selectedColor };
+            setPages(prev => {
+                const n = [...prev];
+                n[currentPageIndex] = [...(n[currentPageIndex] || []), newStroke];
+                return n;
+            });
+
+            socket?.emit('transmit-action', { 
+                classId, 
+                action: 'updateStrokes', 
+                pages: [
+                    ...pagesRef.current.slice(0, currentPageIndex), 
+                    [...(pagesRef.current[currentPageIndex] || []), newStroke], 
+                    ...pagesRef.current.slice(currentPageIndex + 1)
+                ] 
+            });
+            
+            currentStrokePoints.current = [];
+        }
+    }
+    
+    // Always update prevCoords for the next frame
+    prevCoords.current = { x, y };
+
+    // --- 6. CURSOR RENDERING ---
+    cCtx.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+    cCtx.beginPath();
+    cCtx.arc(x, y, 6, 0, Math.PI * 2);
+    // Use orange for hovering, selectedColor for active writing
+    cCtx.fillStyle = data.down ? selectedColor : '#FF8040';
+    cCtx.fill();
+    cCtx.strokeStyle = 'white';
+    cCtx.lineWidth = 2;
+    cCtx.stroke();
+
+}, [data, cvPos, isConnected, activeTool, selectedColor, classId, socket, currentPageIndex]);
+
+  const handleBLEData = useCallback((e) => {
     try {
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [{ name: 'SmartStrokes-Pen' }],
-        optionalServices: [SERVICE_UUID]
-      });
-
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService(SERVICE_UUID);
-      const char = await service.getCharacteristic(CHARACTERISTIC_UUID);
-
-      await char.startNotifications();
-
-      char.addEventListener('characteristicvaluechanged', (e) => {
         const p = JSON.parse(new TextDecoder().decode(e.target.value));
 
         // --- 1. HANDLE NEW PAGE SIGNAL (p.np) ---
         if (p.np === 1 && lastNpSignal.current !== 1) {
-          if (!isStudent) {
-            setPages(prev => {
-              const nextPages = [...prev, []];
-              const newIndex = nextPages.length - 1;
-              
-              setCurrentPageIndex(newIndex);
-              
-              socket?.emit('transmit-action', {
-                classId,
-                action: 'newPage',
-                pageIndex: newIndex
-              });
-              return nextPages;
-            });
-            triggerToast("New Page Created");
-          }
+            if (!isStudent) {
+                setPages(prev => {
+                    const nextPages = [...prev, []];
+                    const newIndex = nextPages.length - 1;
+                    setCurrentPageIndex(newIndex);
+                    socket?.emit('transmit-action', {
+                        classId,
+                        action: 'newPage',
+                        pageIndex: newIndex
+                    });
+                    return nextPages;
+                });
+                triggerToast("New Page Created");
+            }
         }
         lastNpSignal.current = p.np;
 
         // --- 2. HANDLE UNDO SIGNAL (p.un) ---
         if (p.un === 1 && lastUndoSignal.current !== 1) {
-          if (!isStudent) {
-            setPages(prev => {
-              const newPages = [...prev];
-              // Uses the Ref to ensure we undo on the correct page even if state is stale
-              const activeIndex = currentIndexRef.current; 
-              const currentStrokes = newPages[activeIndex] || [];
-              
-              if (currentStrokes.length > 0) {
-                newPages[activeIndex] = currentStrokes.slice(0, -1);
-                
-                socket?.emit('transmit-action', { 
-                  classId, 
-                  action: 'updateStrokes', 
-                  pages: newPages 
+            if (!isStudent) {
+                setPages(prev => {
+                    const newPages = [...prev];
+                    const activeIndex = currentIndexRef.current;
+                    const currentStrokes = newPages[activeIndex] || [];
+                    if (currentStrokes.length > 0) {
+                        newPages[activeIndex] = currentStrokes.slice(0, -1);
+                        socket?.emit('transmit-action', {
+                            classId,
+                            action: 'updateStrokes',
+                            pages: newPages
+                        });
+                        triggerToast(`Undo on Page ${activeIndex + 1}`);
+                    } else {
+                        triggerToast("Nothing to undo");
+                    }
+                    return newPages;
                 });
-                triggerToast(`Undo on Page ${activeIndex + 1}`);
-              } else {
-                triggerToast("Nothing to undo");
-              }
-              return newPages;
-            });
-          }
+            }
         }
         lastUndoSignal.current = p.un;
 
         // --- 3. HANDLE RECENTER SIGNAL (p.rc) ---
-        // Resetting centerPos.current to null forces the IMU useEffect to 
-        // calibrate its zero-point to the current CV cursor position.
         if (p.rc === 1 && lastRcSignal.current !== 1) {
-          centerPos.current = null; 
-          triggerToast("Sensor Synced to CV");
+            centerPos.current = null; 
+            triggerToast("Sensor Synced to CV");
         }
         lastRcSignal.current = p.rc;
 
         // --- 4. HANDLE EXPORT/PDF SIGNAL (p.pdf) ---
         if (p.pdf === 1) {
-          generatePreview();
+            generatePreview();
         }
 
-        // --- 5. UPDATE SENSOR DATA ---
+        // --- 5. UPDATE SENSOR DATA (Updates Tilt Viz) ---
         setData({ ...p, down: p.d === 1 || p.d === true });
-      });
-
-      setIsConnected(true);
-      bleDevice.current = device;
-      triggerToast("Pen Connected");
 
     } catch (error) {
-      console.error("BLE Error:", error);
-      triggerToast("Connection failed");
+        console.error("BLE Parse Error:", error);
     }
-  };
+}, [classId, isStudent, socket]);
+
+  const connectBLE = async () => {
+    if (!navigator.bluetooth) {
+        triggerToast("Bluetooth not supported");
+        return;
+    }
+
+    try {
+        const device = await navigator.bluetooth.requestDevice({
+            filters: [{ name: 'SmartStrokes-Pen' }],
+            optionalServices: [SERVICE_UUID]
+        });
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        const char = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+        // --- CLEANUP STEP: Prevent Stuck Listeners ---
+        // We remove the named function 'handleBLEData' before adding it again
+        char.removeEventListener('characteristicvaluechanged', handleBLEData);
+        
+        await char.startNotifications();
+        char.addEventListener('characteristicvaluechanged', handleBLEData);
+
+        // --- RESET SYSTEM STATE ---
+        centerPos.current = null; // Force IMU to sync to Camera position
+        setIsConnected(true);
+        bleDevice.current = device;
+        
+        triggerToast("Pen Connected & Ready");
+
+    } catch (error) {
+        console.error("BLE Connection Error:", error);
+        triggerToast("Connection failed");
+    }
+};
 
   const finalizeDownload = async () => {
     if (!pdfInstance.current || !classId) return;
@@ -704,25 +823,78 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
               </div>
             </div>
 
-            <div className="bg-slate-50 p-5 rounded-[32px] border border-slate-100 shadow-inner">
-              <span className="text-[10px] font-black text-[#001BB7] uppercase block mb-3 text-center tracking-widest">Workspace Tools</span>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => {setActiveTool('imu'); setSelectedStrokeIdx(null);}} className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'imu' ? 'bg-[#001BB7] text-white shadow-lg' : 'bg-white text-slate-400'}`}><svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/></svg><span className="text-[9px] font-black uppercase">Sensor</span></button>
-                <button onClick={() => {setActiveTool('pen'); setSelectedStrokeIdx(null);}} className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'pen' ? 'bg-[#001BB7] text-white shadow-lg' : 'bg-white text-slate-400'}`}><svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m12 19 7-7 3 3-7 7-3-3Z"/><path d="M2 22 7 12"/></svg><span className="text-[9px] font-black uppercase">Digital</span></button>
-                <button onClick={() => setActiveTool('eraser')} className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'eraser' ? 'bg-[#FF8040] text-white shadow-lg' : 'bg-white text-slate-400'}`}><svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6"/></svg><span className="text-[9px] font-black uppercase">Eraser</span></button>
-                <button onClick={() => setActiveTool('select')} className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'select' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-400'}`}><svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 3v18"/><path d="M3 12h18"/></svg><span className="text-[9px] font-black uppercase">Select</span></button>
-              </div>
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div className="text-[9px] font-black text-slate-400 mb-2 uppercase flex justify-between"><span>Pressure</span><span>{Math.round((data.p / 4095) * 100)}%</span></div>
+              <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden"><div className="h-full transition-all duration-100" style={{ width: `${(data.p / 4095) * 100}%`, backgroundColor: selectedColor }} /></div>
+            </div>
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center">
+              <div className="text-[9px] font-black text-slate-400 mb-4 uppercase w-full text-center tracking-widest">Tilt Viz</div>
+              <div className="h-16 flex items-center justify-center [perspective:200px]"><div className="w-10 h-10 rounded-xl shadow-2xl transition-transform duration-100" style={{ backgroundColor: selectedColor, transform: `rotateX(${data.j * 90}deg) rotateY(${data.i * 90}deg)`, transformStyle: 'preserve-3d' }} /></div>
             </div>
 
             <div className="space-y-4">
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                <div className="text-[9px] font-black text-slate-400 mb-2 uppercase flex justify-between"><span>Pressure</span><span>{Math.round((data.p / 4095) * 100)}%</span></div>
-                <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden"><div className="h-full transition-all duration-100" style={{ width: `${(data.p / 4095) * 100}%`, backgroundColor: selectedColor }} /></div>
+
+            <div className="bg-slate-50 p-5 rounded-[32px] border border-slate-100 shadow-inner">
+              <span className="text-[10px] font-black text-[#001BB7] uppercase block mb-3 text-center tracking-widest">Workspace Tools</span>
+              
+              <div className="grid grid-cols-2 gap-3">
+                {/* Sensor Tool */}
+                <button 
+                  onClick={() => {setActiveTool('imu'); setSelectedStrokeIdxs([]);}} 
+                  className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'imu' ? 'bg-[#001BB7] text-white shadow-lg' : 'bg-white text-slate-400'}`}
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/></svg>
+                  <span className="text-[9px] font-black uppercase">Sensor</span>
+                </button>
+
+                {/* Digital Pen Tool */}
+                <button 
+                  onClick={() => {setActiveTool('pen'); setSelectedStrokeIdxs([]);}} 
+                  className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'pen' ? 'bg-[#001BB7] text-white shadow-lg' : 'bg-white text-slate-400'}`}
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m12 19 7-7 3 3-7 7-3-3Z"/><path d="M2 22 7 12"/></svg>
+                  <span className="text-[9px] font-black uppercase">Digital</span>
+                </button>
+
+                {/* Eraser Tool */}
+                <button 
+                  onClick={() => {setActiveTool('eraser'); setSelectedStrokeIdxs([]);}} 
+                  className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'eraser' ? 'bg-[#FF8040] text-white shadow-lg' : 'bg-white text-slate-400'}`}
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6"/></svg>
+                  <span className="text-[9px] font-black uppercase">Eraser</span>
+                </button>
+
+                {/* Select Tool */}
+                <button 
+                  onClick={() => setActiveTool('select')} 
+                  className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'select' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-400'}`}
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 3v18"/><path d="M3 12h18"/></svg>
+                  <span className="text-[9px] font-black uppercase">Select</span>
+                </button>
               </div>
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center">
-                <div className="text-[9px] font-black text-slate-400 mb-4 uppercase w-full text-center tracking-widest">Tilt Viz</div>
-                <div className="h-16 flex items-center justify-center [perspective:200px]"><div className="w-10 h-10 rounded-xl shadow-2xl transition-transform duration-100" style={{ backgroundColor: selectedColor, transform: `rotateX(${data.j * 90}deg) rotateY(${data.i * 90}deg)`, transformStyle: 'preserve-3d' }} /></div>
-              </div>
+
+              {/* Conditional Multi-select Actions */}
+              {activeTool === 'select' && selectedStrokeIdxs.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-slate-200 flex flex-col gap-2 animate-in slide-in-from-top-2">
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={deleteSelected}
+                      className="flex-1 p-3 rounded-xl bg-red-500 text-white font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-red-100"
+                    >
+                      Delete ({selectedStrokeIdxs.length})
+                    </button>
+                    <button 
+                      onClick={() => setSelectedStrokeIdxs([])}
+                      className="flex-1 p-3 rounded-xl bg-slate-200 text-slate-600 font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all"
+                    >
+                      Deselect
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             </div>
             <div className="h-4 w-full" />
           </div>
@@ -730,13 +902,29 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
       )}
 
       <main ref={mainRef} className={`flex-1 relative bg-slate-200 overflow-hidden min-h-[50vh] ${isStudent ? 'cursor-grab active:cursor-grabbing' : (activeTool === 'pen' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing')}`} style={{ touchAction: 'none' }} onMouseDown={handleStartDraw} onMouseMove={handleDrawingMove} onMouseUp={handleStopDraw} onTouchStart={(e) => { if (e.touches.length === 2) { lastTouchDistance.current = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); } else { handleStartDraw(e); } }} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} >
-        <div className="absolute origin-center transition-transform duration-75 ease-out" style={{ left: '50%', top: '50%', width: '2440px', height: '1170px', transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) scale(${baseScale * zoomScale})` }}>
-          <div className="relative w-full h-full rounded-[24px] lg:rounded-[20px] shadow-2xl border-[8px] lg:border-[16px] border-[#001BB7] bg-white overflow-hidden">
-            <canvas ref={canvasRef} width={2440} height={1170} className="absolute inset-0" />
-            {!isStudent && <canvas ref={cursorRef} width={2440} height={1170} className="absolute inset-0 pointer-events-none" />}
+          <div className="absolute origin-center transition-transform duration-75 ease-out" style={{ left: '50%', top: '50%', width: '2440px', height: '1170px', transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) scale(${baseScale * zoomScale})` }}>
+            <div className="relative w-full h-full rounded-[24px] lg:rounded-[20px] shadow-2xl border-[8px] lg:border-[16px] border-[#001BB7] bg-white overflow-hidden">
+              <canvas ref={canvasRef} width={2440} height={1170} className="absolute inset-0" />
+              {/* MARQUEE SELECTION BOX */}
+              {isMarqueeSelecting && (
+                <div 
+                  style={{
+                    position: 'absolute',
+                    zIndex: 100,
+                    pointerEvents: 'none',
+                    border: '5px dashed #001BB7',
+                    backgroundColor: 'rgba(0, 27, 183, 0.15)',
+                    left: Math.min(marqueeStart.x, marqueeEnd.x),
+                    top: Math.min(marqueeStart.y, marqueeEnd.y),
+                    width: Math.abs(marqueeEnd.x - marqueeStart.x),
+                    height: Math.abs(marqueeEnd.y - marqueeStart.y),
+                  }}
+                />
+              )}
+              {!isStudent && <canvas ref={cursorRef} width={2440} height={1170} className="absolute inset-0 pointer-events-none" />}
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
 
       {showPreview && (
         <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in">
