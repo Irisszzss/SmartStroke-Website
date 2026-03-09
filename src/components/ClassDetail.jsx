@@ -17,6 +17,7 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
   // MODAL STATES
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState(null); // New state for note deletion
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Sorting States
@@ -79,7 +80,6 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
   };
 
   const handleConfirmLeave = async () => {
-    // Check for both possible ID field names
     const idToSend = user.userId || user._id;
 
     if (!idToSend) {
@@ -89,19 +89,31 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
 
     setIsProcessing(true);
     try {
-      // Ensure your api.js accepts (classId, userId)
       await api.leaveClass(classroom._id, idToSend);
-      
       triggerToast("You have left the classroom", "info");
       setShowLeaveConfirm(false);
-      
-      // Navigate back to dashboard (Make sure Dashboard re-fetches on mount)
       onBack(); 
     } catch (err) {
       console.error("Leave error:", err);
       triggerToast("Failed to leave classroom", "error");
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  // NEW: Confirmed File Deletion
+  const handleConfirmDeleteFile = async () => {
+    if (!fileToDelete) return;
+    setIsProcessing(true);
+    try {
+        await api.deleteFile(classroom._id, fileToDelete._id);
+        triggerToast("Note deleted", "success");
+        setLocalFiles(prev => prev.filter(f => f._id !== fileToDelete._id));
+        setFileToDelete(null);
+    } catch (err) { 
+        triggerToast("Delete failed", "error"); 
+    } finally {
+        setIsProcessing(false);
     }
   };
 
@@ -157,14 +169,6 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
     } catch (err) { triggerToast("Download failed", "error"); }
   };
 
-  const handleDeleteFile = async (fileId) => {
-    try {
-        await api.deleteFile(classroom._id, fileId);
-        triggerToast("Note deleted", "success");
-        setLocalFiles(prev => prev.filter(f => f._id !== fileId));
-    } catch (err) { triggerToast("Delete failed", "error"); }
-  };
-
   const handleRemoveStudent = async (studentId) => {
     try {
       await api.removeStudent(classroom._id, studentId);
@@ -191,7 +195,6 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
 
   return (
     <div className="relative min-h-screen animate-in slide-in-from-bottom-4 duration-700 pb-0">
-      {/* Background Orbs */}
       <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-[#001BB7] opacity-10 blur-[100px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] bg-[#FF8040] opacity-10 blur-[100px] rounded-full pointer-events-none" />
 
@@ -306,7 +309,7 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
                                 <a href={`https://smartstroke-api.onrender.com/${file.path}`} target="_blank" rel="noreferrer" className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black hover:bg-[#001BB7] transition-all tracking-[0.1em]">VIEW</a>
                                 <button onClick={() => handleDownload(file)} className="p-2.5 bg-blue-50 text-[#001BB7] rounded-xl hover:bg-[#001BB7] hover:text-white transition-all active:scale-90"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                                 {user?.role === 'teacher' && (
-                                    <button onClick={() => handleDeleteFile(file._id)} className="p-2.5 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                                    <button onClick={() => setFileToDelete(file)} className="p-2.5 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
                                 )}
                             </div>
                         </div>
@@ -384,6 +387,30 @@ export default function ClassDetail({ user, classroom, onBack, onStartSession, t
                       {isProcessing ? "Deleting..." : "Confirm Permanent Delete"}
                   </button>
                   <button disabled={isProcessing} onClick={() => setShowDeleteConfirm(false)} className="w-full bg-slate-50 text-slate-400 py-5 rounded-[20px] md:rounded-[24px] font-black hover:bg-slate-100 transition-all uppercase text-xs tracking-widest">
+                      Cancel
+                  </button>
+              </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: NOTE DELETE MODAL */}
+      {fileToDelete && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => !isProcessing && setFileToDelete(null)} />
+          <div className="relative bg-white p-8 md:p-10 rounded-[32px] md:rounded-[48px] shadow-2xl w-full max-w-md text-center border border-white animate-in zoom-in-95">
+              <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mx-auto mb-6 text-red-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Delete Note?</h3>
+              <p className="text-slate-500 text-sm mb-10 leading-relaxed font-medium">
+                  Are you sure you want to delete <span className="font-bold text-slate-800">"{fileToDelete.filename}"</span>? This cannot be undone.
+              </p>
+              <div className="flex flex-col gap-3">
+                  <button disabled={isProcessing} onClick={handleConfirmDeleteFile} className="w-full bg-red-500 text-white py-5 rounded-[20px] md:rounded-[24px] font-black shadow-xl hover:bg-red-600 transition-all active:scale-95 uppercase text-xs tracking-widest disabled:opacity-50">
+                      {isProcessing ? "Deleting..." : "Confirm Delete"}
+                  </button>
+                  <button disabled={isProcessing} onClick={() => setFileToDelete(null)} className="w-full bg-slate-50 text-slate-400 py-5 rounded-[20px] md:rounded-[24px] font-black hover:bg-slate-100 transition-all uppercase text-xs tracking-widest">
                       Cancel
                   </button>
               </div>
