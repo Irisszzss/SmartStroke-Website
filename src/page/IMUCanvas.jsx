@@ -756,195 +756,178 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
 
   return (
     <div className="flex flex-col lg:flex-row h-screen w-screen bg-slate-100 overflow-hidden font-['Poppins'] select-none">
+      {/* Custom Scrollbar Global Style */}
+      <style>{`
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scroll { scrollbar-width: thin; scrollbar-color: #e2e8f0 transparent; }
+      `}</style>
+
       {!isStudent && (
-        <aside className="w-full lg:w-[320px] bg-white flex flex-col border-r border-slate-200 z-50 shadow-2xl h-[40vh] lg:h-full overflow-hidden">
-          <div className="p-4 lg:p-6 lg:pt-20 border-b border-slate-100 sticky top-0 bg-white z-30">
-            <div className="text-xl lg:text-2xl font-black tracking-tighter text-center italic">
-              <span className="text-[#001BB7]">Smart</span><span className="text-[#FF8040]">Stroke</span>
+        <aside className="w-full lg:w-[260px] bg-white flex flex-col border-r border-slate-200 z-50 shadow-xl h-auto lg:h-full overflow-hidden shrink-0">
+          {/* Navigation & Page Controls */}
+          <div className="p-3 bg-white border-b border-slate-100 z-20 shadow-sm">
+            <div className="flex flex-row lg:flex-col gap-3 lg:gap-2 items-center lg:items-stretch">
+                <div className="flex items-center justify-between flex-1 lg:flex-none">
+                    <button 
+                        onClick={() => {
+                        const newIdx = Math.max(0, currentPageIndex - 1);
+                        setCurrentPageIndex(newIdx);
+                        socket?.emit('transmit-action', { classId, action: 'newPage', pageIndex: newIdx });
+                        }} 
+                        className="w-8 h-8 lg:w-9 lg:h-9 rounded-xl border border-slate-100 bg-white font-black hover:bg-slate-50 transition-colors flex items-center justify-center shadow-sm"
+                    >
+                        ←
+                    </button>
+                    <span className="text-sm font-black text-slate-800">
+                        {currentPageIndex + 1} / {pages.length}
+                    </span>
+                    <button 
+                        onClick={() => {
+                        const newIdx = Math.min(pages.length - 1, currentPageIndex + 1);
+                        setCurrentPageIndex(newIdx);
+                        socket?.emit('transmit-action', { classId, action: 'newPage', pageIndex: newIdx });
+                        }} 
+                        className="w-8 h-8 lg:w-9 lg:h-9 rounded-xl border border-slate-100 bg-white font-black hover:bg-slate-50 transition-colors flex items-center justify-center shadow-sm"
+                    >
+                        →
+                    </button>
+                </div>
+                <div className="flex gap-1.5 flex-1 lg:flex-none">
+                    <button onClick={createNewPage} className="flex-1 py-2 rounded-lg bg-slate-900 text-white font-black text-[8px] uppercase tracking-widest active:scale-95 transition-all">+ Page</button>
+                    <button onClick={generatePreview} className="flex-1 py-2 rounded-lg bg-[#001BB7] text-white font-black text-[8px] uppercase tracking-widest active:scale-95 transition-all shadow-md">Export</button>
+                </div>
             </div>
           </div>
 
-          <div className="p-4 lg:p-3 bg-white border-b border-slate-100 space-y-3 sticky top-[72px] lg:top-[88px] z-20 shadow-sm">
-            {/* Updated Navigation Controls */}
-<div className="flex items-center justify-between mb-2">
-  <button 
-    onClick={() => {
-      const newIdx = Math.max(0, currentPageIndex - 1);
-      setCurrentPageIndex(newIdx);
-      // Notify students to switch to this page
-      socket?.emit('transmit-action', { classId, action: 'newPage', pageIndex: newIdx });
-    }} 
-    className="w-10 h-10 lg:w-12 lg:h-12 rounded-2xl border border-slate-100 bg-white font-black hover:bg-slate-50 transition-colors"
-  >
-    ←
-  </button>
-  
-  <span className="text-md lg:text-lg font-black text-slate-800">
-    {currentPageIndex + 1}/{pages.length}
-  </span>
-  
-  <button 
-    onClick={() => {
-      const newIdx = Math.min(pages.length - 1, currentPageIndex + 1);
-      setCurrentPageIndex(newIdx);
-      // Notify students to switch to this page
-      socket?.emit('transmit-action', { classId, action: 'newPage', pageIndex: newIdx });
-    }} 
-    className="w-10 h-10 lg:w-12 lg:h-12 rounded-2xl border border-slate-100 bg-white font-black hover:bg-slate-50 transition-colors"
-  >
-    →
-  </button>
-</div>
-            <div className="flex gap-2">
-              <button onClick={createNewPage} className="flex-1 p-3 lg:p-4 rounded-2xl bg-slate-900 text-white font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all">+ Page</button>
-              <button onClick={generatePreview} className="flex-1 p-3 lg:p-4 rounded-2xl bg-[#001BB7] text-white font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-900/20">Export</button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 lg:p-6 pb-0 lg:pb-40 space-y-6 lg:space-y-4 no-scrollbar">
-            <div className="space-y-2">
-              {!navigator.bluetooth && (
-                <div className="p-3 bg-red-50 rounded-xl border border-red-100 mb-2">
-                  <p className="text-[9px] font-black text-red-500 uppercase text-center leading-tight">Bluetooth Not Supported <br/> Use Chrome (Android) or Bluefy (iOS)</p>
-                </div>
-              )}
-              <button onClick={async () => { if (!navigator.bluetooth) { triggerToast("Bluetooth not supported"); return; } try { await connectBLE(); } catch (err) { triggerToast("Connection failed"); } }} className={`w-full p-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg transition-all ${isConnected ? 'bg-slate-100 text-slate-400' : 'bg-orange-500 text-white shadow-orange-100 active:scale-95'}`}>
-                {isConnected ? 'Linked' : 'Connect Pen'}
-              </button>
-              <button onClick={() => { centerPos.current = null; triggerToast("Sensor Centered"); }} className="w-full p-4 rounded-2xl bg-blue-50 text-[#001BB7] font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Recenter Sensor</button>
-            </div>
-
-            <div className="text-center">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-4">Color Palette</span>
-              <div className="flex flex-wrap justify-center gap-3">
-                {COLORS.map(color => (
-                  <div key={color} onClick={() => handleColorUpdate(color)} className={`w-8 h-8 rounded-full cursor-pointer transition-all hover:scale-125 shadow-md ${selectedColor === color ? 'ring-4 ring-[#001BB7]/20 border-2 border-white scale-110' : ''}`} style={{ backgroundColor: color }} />
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-              <div className="text-[9px] font-black text-slate-400 mb-2 uppercase flex justify-between"><span>Pressure</span><span>{Math.round((data.p / 4095) * 100)}%</span></div>
-              <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden"><div className="h-full transition-all duration-100" style={{ width: `${(data.p / 4095) * 100}%`, backgroundColor: selectedColor }} /></div>
-            </div>
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center">
-              <div className="text-[9px] font-black text-slate-400 mb-4 uppercase w-full text-center tracking-widest">Tilt Viz</div>
-              <div className="h-16 flex items-center justify-center [perspective:200px]"><div className="w-10 h-10 rounded-xl shadow-2xl transition-transform duration-100" style={{ backgroundColor: selectedColor, transform: `rotateX(${data.j * 90}deg) rotateY(${data.i * 90}deg)`, transformStyle: 'preserve-3d' }} /></div>
-            </div>
-
-            <div className="space-y-4">
-
-            <div className="bg-slate-50 p-5 rounded-[32px] border border-slate-100 shadow-inner">
-              <span className="text-[10px] font-black text-[#001BB7] uppercase block mb-3 text-center tracking-widest">Workspace Tools</span>
-              
-              <div className="grid grid-cols-2 gap-3">
-                {/* Sensor Tool */}
-                <button 
-                  onClick={() => {setActiveTool('imu'); setSelectedStrokeIdxs([]);}} 
-                  className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'imu' ? 'bg-[#001BB7] text-white shadow-lg' : 'bg-white text-slate-400'}`}
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/></svg>
-                  <span className="text-[9px] font-black uppercase">Sensor</span>
-                </button>
-
-                {/* Digital Pen Tool */}
-                <button 
-                  onClick={() => {setActiveTool('pen'); setSelectedStrokeIdxs([]);}} 
-                  className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'pen' ? 'bg-[#001BB7] text-white shadow-lg' : 'bg-white text-slate-400'}`}
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m12 19 7-7 3 3-7 7-3-3Z"/><path d="M2 22 7 12"/></svg>
-                  <span className="text-[9px] font-black uppercase">Digital</span>
-                </button>
-
-                {/* Eraser Tool */}
-                <button 
-                  onClick={() => {setActiveTool('eraser'); setSelectedStrokeIdxs([]);}} 
-                  className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'eraser' ? 'bg-[#FF8040] text-white shadow-lg' : 'bg-white text-slate-400'}`}
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6"/></svg>
-                  <span className="text-[9px] font-black uppercase">Eraser</span>
-                </button>
-
-                {/* Select Tool */}
-                <button 
-                  onClick={() => setActiveTool('select')} 
-                  className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${activeTool === 'select' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-400'}`}
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 3v18"/><path d="M3 12h18"/></svg>
-                  <span className="text-[9px] font-black uppercase">Select</span>
-                </button>
-              </div>
-
-              {/* Conditional Multi-select Actions */}
-              {activeTool === 'select' && selectedStrokeIdxs.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-slate-200 flex flex-col gap-2 animate-in slide-in-from-top-2">
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={deleteSelected}
-                      className="flex-1 p-3 rounded-xl bg-red-500 text-white font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-red-100"
-                    >
-                      Delete ({selectedStrokeIdxs.length})
+          {/* Tools Scroll Area */}
+          <div className="flex-1 overflow-y-auto p-3 lg:p-4 pb-6 lg:pb-10 custom-scroll">
+            <div className="flex flex-col gap-2">
+                
+                {/* Connectivity Section */}
+                <div className="space-y-1.5">
+                    {!navigator.bluetooth && (
+                        <div className="p-2 bg-red-50 rounded-lg border border-red-100 mb-1">
+                            <p className="text-[7px] font-black text-red-500 uppercase text-center leading-tight">Bluetooth Unsupported</p>
+                        </div>
+                    )}
+                    <button onClick={async () => { if (!navigator.bluetooth) { triggerToast("Bluetooth not supported"); return; } try { await connectBLE(); } catch (err) { triggerToast("Connection failed"); } }} className={`w-full p-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-md transition-all ${isConnected ? 'bg-slate-100 text-slate-400' : 'bg-orange-500 text-white active:scale-95'}`}>
+                        {isConnected ? 'Linked' : 'Connect Pen'}
                     </button>
-                    <button 
-                      onClick={() => setSelectedStrokeIdxs([])}
-                      className="flex-1 p-3 rounded-xl bg-slate-200 text-slate-600 font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all"
-                    >
-                      Deselect
-                    </button>
-                  </div>
+                    <button onClick={() => { centerPos.current = null; triggerToast("Sensor Centered"); }} className="w-full p-2.5 rounded-xl bg-blue-50 text-[#001BB7] font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all">Recenter</button>
                 </div>
-              )}
-            </div>
+
+                {/* PALETTE AND TILT VIZ - SIDE BY SIDE ON TABLET, STACKED ON PC */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-2">
+                    {/* Palette Container */}
+                    <div className="bg-white p-2 rounded-2xl border border-slate-100 flex flex-col items-center justify-center min-h-[80px]">
+                        <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Palette</span>
+                        <div className="flex flex-wrap justify-center gap-1">
+                            {COLORS.map(color => (
+                                <div 
+                                    key={color} 
+                                    onClick={() => handleColorUpdate(color)} 
+                                    className={`w-4 h-4 rounded-full cursor-pointer transition-all hover:scale-110 shadow-sm ${selectedColor === color ? 'ring-2 ring-[#001BB7]/30 border border-white scale-110' : ''}`} 
+                                    style={{ backgroundColor: color }} 
+                                />
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Tilt Viz Container */}
+                    <div className="bg-slate-50 p-2 rounded-2xl border border-slate-100 flex flex-col items-center justify-center min-h-[80px]">
+                        <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Tilt</span>
+                        <div className="h-10 flex items-center justify-center [perspective:150px]">
+                            <div 
+                                className="w-6 h-6 rounded-lg shadow-lg transition-transform duration-100" 
+                                style={{ 
+                                    backgroundColor: selectedColor, 
+                                    transform: `rotateX(${data.j * 90}deg) rotateY(${data.i * 90}deg)`, 
+                                    transformStyle: 'preserve-3d' 
+                                }} 
+                            />
+                        </div>
+                    </div>
+                </div>
+                {/* Pressure Visualizer */}
+                <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                    <div className="text-[7px] font-black text-slate-400 mb-1 uppercase flex justify-between tracking-tight"><span>Pressure Sense</span><span>{Math.round((data.p / 4095) * 100)}%</span></div>
+                    <div className="h-1 w-full bg-slate-200 rounded-full overflow-hidden">
+                        <div className="h-full transition-all duration-100" style={{ width: `${(data.p / 4095) * 100}%`, backgroundColor: selectedColor }} />
+                    </div>
+                </div>
+
+                {/* Workspace Tools Grid */}
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 shadow-inner">
+                    <span className="text-[8px] font-black text-[#001BB7] uppercase block mb-2 text-center tracking-widest">Workspace Tools</span>
+                    <div className="grid grid-cols-2 gap-2">
+                        {[
+                        { id: 'imu', label: 'Sensor', icon: <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83"/> },
+                        { id: 'pen', label: 'Digital', icon: <path d="m12 19 7-7 3 3-7 7-3-3ZM2 22 7 12"/> },
+                        { id: 'eraser', label: 'Eraser', icon: <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6"/>, color: '#FF8040' },
+                        { id: 'select', label: 'Select', icon: <path d="M12 3v18M3 12h18"/>, color: '#0f172a' }
+                        ].map((tool) => (
+                        <button 
+                            key={tool.id}
+                            onClick={() => {setActiveTool(tool.id); if(tool.id !== 'select') setSelectedStrokeIdxs([]);}} 
+                            className={`p-2 lg:p-2.5 rounded-lg border transition-all flex flex-col items-center gap-1 ${activeTool === tool.id ? 'text-white shadow-md' : 'bg-white text-slate-400'}`}
+                            style={activeTool === tool.id ? { backgroundColor: tool.color || '#001BB7', borderColor: tool.color || '#001BB7' } : {}}
+                        >
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">{tool.icon}</svg>
+                            <span className="text-[7px] font-black uppercase">{tool.label}</span>
+                        </button>
+                        ))}
+                    </div>
+
+                    {activeTool === 'select' && selectedStrokeIdxs.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-slate-200 flex flex-col gap-1.5 animate-in slide-in-from-top-1">
+                        <div className="flex gap-1.5">
+                            <button onClick={deleteSelected} className="flex-1 py-1.5 rounded-md bg-red-500 text-white font-black text-[7px] uppercase tracking-widest shadow-sm">Delete ({selectedStrokeIdxs.length})</button>
+                            <button onClick={() => setSelectedStrokeIdxs([])} className="flex-1 py-1.5 rounded-md bg-slate-200 text-slate-600 font-black text-[7px] uppercase tracking-widest">Clear</button>
+                        </div>
+                        </div>
+                    )}
+                </div>
             </div>
             <div className="h-4 w-full" />
           </div>
         </aside>
       )}
 
+      {/* Main Canvas Area */}
       <main ref={mainRef} className={`flex-1 relative bg-slate-200 overflow-hidden min-h-[50vh] ${isStudent ? 'cursor-grab active:cursor-grabbing' : (activeTool === 'pen' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing')}`} style={{ touchAction: 'none' }} onMouseDown={handleStartDraw} onMouseMove={handleDrawingMove} onMouseUp={handleStopDraw} onTouchStart={(e) => { if (e.touches.length === 2) { lastTouchDistance.current = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); } else { handleStartDraw(e); } }} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} >
           <div className="absolute origin-center transition-transform duration-75 ease-out" style={{ left: '50%', top: '50%', width: '2440px', height: '1170px', transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) scale(${baseScale * zoomScale})` }}>
-            <div className="relative w-full h-full rounded-[24px] lg:rounded-[20px] shadow-2xl border-[8px] lg:border-[16px] border-[#001BB7] bg-white overflow-hidden">
+            <div className="relative w-full h-full rounded-xl shadow-2xl border-[6px] border-[#001BB7] bg-white overflow-hidden">
               <canvas ref={canvasRef} width={2440} height={1170} className="absolute inset-0" />
-              {/* MARQUEE SELECTION BOX */}
-              {isMarqueeSelecting && (
-                <div 
-                  style={{
-                    position: 'absolute',
-                    zIndex: 100,
-                    pointerEvents: 'none',
-                    border: '5px dashed #001BB7',
-                    backgroundColor: 'rgba(0, 27, 183, 0.15)',
-                    left: Math.min(marqueeStart.x, marqueeEnd.x),
-                    top: Math.min(marqueeStart.y, marqueeEnd.y),
-                    width: Math.abs(marqueeEnd.x - marqueeStart.x),
-                    height: Math.abs(marqueeEnd.y - marqueeStart.y),
-                  }}
-                />
-              )}
               {!isStudent && <canvas ref={cursorRef} width={2440} height={1170} className="absolute inset-0 pointer-events-none" />}
             </div>
           </div>
         </main>
 
+      {/* Export Preview Modal */}
       {showPreview && (
-        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in">
-          <div className="bg-white rounded-[32px] lg:rounded-[48px] w-full max-w-[1200px] h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-            <header className="p-6 border-b border-slate-100 flex justify-between items-center"><h2 className="text-xl lg:text-2xl font-black text-[#001BB7] uppercase italic">Digital Preview</h2><button className="w-10 h-10 rounded-2xl bg-slate-50 text-slate-400 font-black" onClick={() => setShowPreview(false)}>✕</button></header>
-            <div className="flex-1 flex flex-col lg:flex-row p-6 gap-6 overflow-hidden">
-              <object data={pdfBlobUrl} type="application/pdf" className="flex-1 bg-slate-100 rounded-[24px] border-none min-h-[300px]">
-                <div className="flex flex-col items-center justify-center h-full p-6 text-center"><p className="text-slate-500 mb-4 font-bold">PDF Preview not supported on this device.</p><a href={pdfBlobUrl} download={`${fileName}.pdf`} className="p-4 bg-[#001BB7] text-white rounded-2xl font-black uppercase text-[10px]">Open PDF Directly</a></div>
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center z-[1000] p-4">
+          <div className="bg-white rounded-3xl w-full max-w-[900px] h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+            <header className="p-4 border-b border-slate-100 flex justify-between items-center"><h2 className="text-base font-black text-[#001BB7] uppercase italic">Digital Preview</h2><button className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 font-black" onClick={() => setShowPreview(false)}>✕</button></header>
+            <div className="flex-1 flex flex-col lg:flex-row p-4 gap-4 overflow-hidden">
+              <object data={pdfBlobUrl} type="application/pdf" className="flex-1 bg-slate-100 rounded-xl border-none min-h-[250px]">
+                <div className="flex flex-col items-center justify-center h-full p-4 text-center"><p className="text-slate-500 mb-2 text-xs font-bold">Preview not supported.</p><a href={pdfBlobUrl} download={`${fileName}.pdf`} className="p-2.5 bg-[#001BB7] text-white rounded-lg font-black uppercase text-[8px]">Download PDF</a></div>
               </object>
-              <div className="w-full lg:w-[320px] flex flex-col gap-6">
-                <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">File Name</label><input type="text" value={fileName} onChange={e => setFileName(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none" /></div>
-                <div className="mt-auto space-y-3"><button disabled={isSaving} onClick={finalizeDownload} className="w-full p-6 bg-[#001BB7] text-white rounded-3xl font-black uppercase text-xs tracking-widest disabled:opacity-50">{isSaving ? "Saving..." : "Save"}</button><button onClick={() => setShowPreview(false)} className="w-full p-4 text-slate-400 font-black uppercase text-[10px]">Discard</button></div>
+              <div className="w-full lg:w-[240px] flex flex-col gap-4">
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">File Name</label><input type="text" value={fileName} onChange={e => setFileName(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-[#001BB7]" /></div>
+                <div className="mt-auto space-y-2"><button disabled={isSaving} onClick={finalizeDownload} className="w-full p-3.5 bg-[#001BB7] text-white rounded-xl font-black uppercase text-[10px] tracking-widest active:scale-95">{isSaving ? "Saving..." : "Save"}</button><button onClick={() => setShowPreview(false)} className="w-full py-2 text-slate-400 font-black uppercase text-[8px]">Discard</button></div>
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* Toast Notification */}
       {toast.show && (
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-[#001BB7] text-white px-8 py-4 rounded-full font-black text-[11px] uppercase z-[2000] shadow-2xl">{toast.message}</div>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#001BB7] text-white px-5 py-2.5 rounded-full font-black text-[9px] uppercase z-[2000] shadow-xl animate-in slide-in-from-bottom-2">
+          {toast.message}
+        </div>
       )}
     </div>
   );
