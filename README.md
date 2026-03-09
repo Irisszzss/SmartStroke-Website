@@ -1,12 +1,71 @@
-# React + Vite
+# SmartStroke: A Sensor-Enhanced Marker Attachment for Handwriting Digitization
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**SmartStroke** is an intelligent handwriting digitization system that transforms physical strokes into digital data. By fusing **Computer Vision (OpenCV)** with **Inertial Measurement Units (IMU)**, the system captures real-time handwriting with high precision without the need for specialized digital paper.
 
-Currently, two official plugins are available:
+## 🚀 Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+The project utilizes a **hybrid approach** to track movement:
 
-## Expanding the ESLint configuration
+* **Computer Vision:** An **OpenCV** pipeline (managed via `blue.py`) tracks the physical marker's position using a camera.
+* **Inertial Sensing:** A **BNO085 9-axis IMU** captures **6-DOF motion and orientation data** to refine the stroke path.
+* **Real-Time Visualization:** A **React-based web interface** provides immediate feedback of the digitized strokes.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+---
+
+## 🏗️ Project Structure
+
+* 📂 `firmware/` — **C++** code for the **ESP32**, managing the **BNO085 IMU** and **FSR** sensors.
+* 📂 `src/` — **React.js** frontend source code for the visualization dashboard.
+* 📄 `blue.py` — Core **OpenCV** engine for visual marker tracking and coordinate mapping.
+* 📄 `vercel.json` — Deployment configuration for hosting the web interface.
+
+---
+
+## 🛠️ Technical Stack
+
+### **Embedded Hardware**
+
+* **ESP32**: Main microcontroller for data acquisition.
+* **BNO085 IMU**: 9-axis sensor for orientation and motion tracking.
+* **Force Sensitive Resistor (FSR)**: Detects pen-down/pen-up pressure states.
+
+### **Software Engine**
+
+* **Vision Engine**: Python and **OpenCV** for spatial coordinate tracking.
+* **Web Frontend**: **React.js**, Vite, and Tailwind CSS for a modern dashboard.
+* **Backend**: **Node.js** and **Express.js** with **Socket.IO** for real-time data streaming.
+
+### **Algorithms**
+
+* **Madgwick Filter**: Used for orientation estimation.
+* **Extended Kalman Filter (EKF)**: Performs sensor fusion between vision and IMU data.
+
+---
+
+## 🔧 Getting Started
+
+### 1️⃣ Vision Setup
+
+Install the Python dependencies for the tracking engine:
+
+```bash
+pip install opencv-python numpy
+python blue.py
+
+```
+
+### 2️⃣ Frontend Setup
+
+Install the web dependencies and start the development server:
+
+```bash
+npm install
+npm run dev
+
+```
+
+### 3️⃣ Firmware
+
+Upload the contents of the `firmware/` directory to your **ESP32** using the Arduino IDE.
+
+---
