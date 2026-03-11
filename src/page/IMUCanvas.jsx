@@ -197,7 +197,7 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
     } else if (isDraggingStroke && selectedStrokeIdxs.length > 0) {
       const dx = coords.x - lastMousePos.x;
       const dy = coords.y - lastMousePos.y;
-      
+
       const newPages = [...pages];
       selectedStrokeIdxs.forEach(idx => {
         if (newPages[currentPageIndex][idx]) {
@@ -207,31 +207,50 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
           }));
         }
       });
-      
+
       setPages(newPages);
       setLastMousePos(coords);
     } else if (isMouseDrawing) {
-      const ctx = canvasRef.current.getContext('2d');
-      ctx.beginPath(); 
-      ctx.lineWidth = 4; 
-      ctx.lineCap = 'round'; 
-      ctx.strokeStyle = selectedColor;
-      ctx.moveTo(prevCoords.current.x, prevCoords.current.y); 
-      ctx.lineTo(coords.x, coords.y); 
-      ctx.stroke();
+      // --- THE FIX: DISTANCE THRESHOLD ---
+      // Only draw and record if the mouse has moved a minimum distance (e.g., 3px)
+      // This prevents "clumping" of points when moving slowly.
+      const dist = Math.hypot(coords.x - prevCoords.current.x, coords.y - prevCoords.current.y);
       
-      socket?.emit('transmit-stroke', { 
-        classId, x: coords.x, y: coords.y, 
-        prevX: prevCoords.current.x, prevY: prevCoords.current.y, 
-        color: selectedColor, pageIndex: currentPageIndex 
-      });
+      if (dist > 3) {
+        const ctx = canvasRef.current.getContext('2d');
+        
+        ctx.beginPath();
+        // Optional: Use pressure for dynamic width if data.p is available, 
+        // otherwise stick to a clean constant like 4.
+        const dynamicWidth = data.p > 0 ? 1 + (data.p / 4095) * 5 : 4;
+        
+        ctx.lineWidth = dynamicWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round'; // Smoother joins
+        ctx.strokeStyle = selectedColor;
+        
+        ctx.moveTo(prevCoords.current.x, prevCoords.current.y);
+        ctx.lineTo(coords.x, coords.y);
+        ctx.stroke();
 
-      currentStrokePoints.current.push(coords);
-      prevCoords.current = coords;
+        socket?.emit('transmit-stroke', {
+          classId,
+          x: coords.x,
+          y: coords.y,
+          prevX: prevCoords.current.x,
+          prevY: prevCoords.current.y,
+          color: selectedColor,
+          pageIndex: currentPageIndex,
+          width: dynamicWidth // Sync the width to students
+        });
+
+        currentStrokePoints.current.push(coords);
+        prevCoords.current = coords;
+      }
     } else if (isPanning) {
-      setOffset(prev => ({ 
-        x: prev.x + (clientX - lastMousePos.x), 
-        y: prev.y + (clientY - lastMousePos.y) 
+      setOffset(prev => ({
+        x: prev.x + (clientX - lastMousePos.x),
+        y: prev.y + (clientY - lastMousePos.y)
       }));
       setLastMousePos({ x: clientX, y: clientY });
     }
