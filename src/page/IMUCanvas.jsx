@@ -216,11 +216,11 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
       // This prevents "clumping" of points when moving slowly.
       const dist = Math.hypot(coords.x - prevCoords.current.x, coords.y - prevCoords.current.y);
       
-      if (dist > 3) {
+      if (dist > 4) {
         const ctx = canvasRef.current.getContext('2d');
         
         ctx.beginPath();
-        // Optional: Use pressure for dynamic width if data.p is available, 
+        // Optional: Use pressure for dynamic width if data.p is available,   
         // otherwise stick to a clean constant like 4.
         const dynamicWidth = data.p > 0 ? 1 + (data.p / 4095) * 5 : 4;
         
@@ -400,7 +400,10 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
   useEffect(() => {
   if (!socket) return;
 
-  socket.on('receive-cv-pos', (pos) => setCvPos({ x: pos.x, y: pos.y }));
+    socket.on('receive-cv-pos', (pos) => {
+      console.log("📍 Coordinate received from Python:", pos);
+      setCvPos({ x: pos.x, y: pos.y });
+  });
 
   socket.on('receive-stroke', (s) => {
     // 1. Instant Draw: Draw to canvas immediately for smooth real-time viewing
@@ -525,7 +528,7 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
     
     // --- 3. DYNAMIC SENSITIVITY & COORDINATE CALCULATION ---
     // dynamicSens maps angular tilt to canvas pixels. 
-    const dynamicSens = 250 + (Math.abs(data.j) * 80); 
+    const dynamicSens = 150 + (Math.abs(data.j) * 80); 
     
     // The core fix: target = (Physical Marker Position) - (Angular Offset)
     const targetX = cvPos.x - (yaw - centerPos.current.yaw) * dynamicSens;
