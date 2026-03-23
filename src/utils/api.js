@@ -14,7 +14,6 @@ export const api = {
   updateProfile: (userId, data) => 
     axios.put(`${API_URL}/user/${userId}`, data),
 
-  // FIXED: Field name changed from 'avatar' to 'profilePicture' to match backend
   uploadAvatar: (userId, file) => {
     const formData = new FormData();
     formData.append('profilePicture', file); 
@@ -36,16 +35,13 @@ export const api = {
   joinClass: (studentId, classCode) => 
     axios.post(`${API_URL}/join-class`, { studentId, classCode }),
 
-  // Backend should have: app.delete('/class/:classId', ...)
   deleteClass: (classId) => 
     axios.delete(`${API_URL}/class/${classId}`),
 
-  // Match backend: app.post('/class/:classId/leave', ...)
   leaveClass: (classId, userId) => 
     axios.post(`${API_URL}/class/${classId}/leave`, { userId }),
 
   // --- FILE MANAGEMENT ---
-  // Backend should have: app.delete('/class/:classId/file/:fileId', ...)
   deleteFile: (classId, fileId) =>
     axios.delete(`${API_URL}/class/${classId}/file/${fileId}`),
 
@@ -61,7 +57,6 @@ export const api = {
   getStudents: (classId) => 
     axios.get(`${API_URL}/class/${classId}/students`),
 
-  // Recommendation: Use 'userId' here as well to match the leaveClass pattern
   removeStudent: (classId, userId) => 
     axios.post(`${API_URL}/class/${classId}/remove-student`, { userId }),
 

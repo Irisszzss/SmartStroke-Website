@@ -5,7 +5,6 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
   const fileInputRef = useRef(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  // --- NAME INTEGRITY FIX START ---
   const getInitialNames = useCallback(() => {
     let fName = user?.firstName || '';
     let sName = user?.surname || '';
@@ -18,7 +17,6 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
   }, [user]);
 
   const { fName, sName } = getInitialNames();
-  // --- NAME INTEGRITY FIX END ---
 
   const [formData, setFormData] = useState({
     firstName: fName,
@@ -123,7 +121,6 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
 
   return (
     <div className="relative min-h-[70vh] animate-in fade-in duration-700 flex flex-col items-center pb-8 font-['Poppins']">
-      {/* Scrollbar CSS */}
       <style>{`
         .custom-scroll::-webkit-scrollbar { width: 5px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -132,7 +129,6 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
         .custom-scroll { scrollbar-width: thin; scrollbar-color: #e2e8f0 transparent; }
       `}</style>
 
-      {/* Background Brand Identity */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-10%] right-[-5%] w-[300px] h-[300px] bg-[#FF8040] opacity-[0.06] blur-[100px] rounded-full animate-pulse" />
         <div className="absolute bottom-[-10%] left-[-5%] w-[300px] h-[300px] bg-[#001BB7] opacity-[0.06] blur-[100px] rounded-full animate-pulse" />
@@ -148,11 +144,9 @@ export default function Profile({ user, onUpdateUser, onBack, triggerToast }) {
         </button>
       </div>
 
-      {/* Card Container with Internal Scrollbar */}
       <div className="w-full max-w-2xl bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-slate-50 z-10 overflow-y-auto max-h-[85vh] custom-scroll relative">
         <div className="flex items-center gap-6 mb-8 border-b border-slate-100 pb-8">
           <div className="relative">
-            {/* PULSING PROFILE CONTAINER */}
             <div className={`relative ${isEditing ? 'cursor-pointer animate-pulse' : 'cursor-default'}`} onClick={handleAvatarClick}>
               <div className={`w-20 h-20 rounded-2xl bg-[#001BB7] flex items-center justify-center text-white text-3xl font-black uppercase shadow-lg overflow-hidden transition-all duration-500 ${isEditing ? 'ring-4 ring-[#001BB7]/30 scale-105' : ''}`}>
                 {avatarUrl ? (

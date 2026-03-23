@@ -76,7 +76,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
       if (!stroke.points || stroke.points.length < 2) return;
 
       ctx.beginPath();
-      // Check if this specific index is in our multiselect array
       const isSelected = selectedStrokeIdxs.includes(idx) && activeTool === 'select';
       ctx.strokeStyle = isSelected ? '#22c55e' : stroke.color;
 
@@ -85,7 +84,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
         ctx.shadowColor = '#22c55e';
       }
 
-      // Drawing logic (including the smooth curves from before)
       ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
       if (stroke.points.length === 2) {
         ctx.lineTo(stroke.points[1].x, stroke.points[1].y);
@@ -108,7 +106,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
     if (selectedStrokeIdxs.length > 0 && activeTool === 'select') {
       const newPages = [...pages];
       
-      // Apply color to all selected strokes
       selectedStrokeIdxs.forEach(idx => {
         if (newPages[currentPageIndex][idx]) {
           newPages[currentPageIndex][idx].color = color;
@@ -125,13 +122,12 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
     if (selectedStrokeIdxs.length === 0) return;
     
     const newPages = [...pages];
-    // Keep only the strokes whose index is NOT in the selectedStrokeIdxs array
     newPages[currentPageIndex] = newPages[currentPageIndex].filter(
       (_, index) => !selectedStrokeIdxs.includes(index)
     );
 
     setPages(newPages);
-    setSelectedStrokeIdxs([]); // Clear selection after deleting
+    setSelectedStrokeIdxs([]); 
     socket?.emit('transmit-action', { classId, action: 'updateStrokes', pages: newPages });
     triggerToast("Selection Deleted");
   };
@@ -151,20 +147,16 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
       if (activeTool === 'select') {
         const hitIndex = pageStrokesHitTest(coords);
         
-        // If we hit an already selected stroke, start dragging the group
         if (hitIndex !== -1 && selectedStrokeIdxs.includes(hitIndex)) {
           setIsDraggingStroke(true);
           setLastMousePos(coords);
         } 
-        // If we hit nothing, start a marquee selection box
         else if (hitIndex === -1) {
           setIsMarqueeSelecting(true);
           setMarqueeStart(coords);
           setMarqueeEnd(coords);
-          // Clear selection if Shift is not held
           if (!e.shiftKey) setSelectedStrokeIdxs([]);
         } 
-        // If we hit a new stroke (not currently selected), select it
         else {
           handleHitDetection(coords, e.shiftKey);
         }
@@ -211,22 +203,17 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
       setPages(newPages);
       setLastMousePos(coords);
     } else if (isMouseDrawing) {
-      // --- THE FIX: DISTANCE THRESHOLD ---
-      // Only draw and record if the mouse has moved a minimum distance (e.g., 3px)
-      // This prevents "clumping" of points when moving slowly.
       const dist = Math.hypot(coords.x - prevCoords.current.x, coords.y - prevCoords.current.y);
       
       if (dist > 4) {
         const ctx = canvasRef.current.getContext('2d');
         
         ctx.beginPath();
-        // Optional: Use pressure for dynamic width if data.p is available,   
-        // otherwise stick to a clean constant like 4.
         const dynamicWidth = data.p > 0 ? 1 + (data.p / 4095) * 5 : 4;
         
         ctx.lineWidth = dynamicWidth;
         ctx.lineCap = 'round';
-        ctx.lineJoin = 'round'; // Smoother joins
+        ctx.lineJoin = 'round';
         ctx.strokeStyle = selectedColor;
         
         ctx.moveTo(prevCoords.current.x, prevCoords.current.y);
@@ -241,7 +228,7 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
           prevY: prevCoords.current.y,
           color: selectedColor,
           pageIndex: currentPageIndex,
-          width: dynamicWidth // Sync the width to students
+          width: dynamicWidth
         });
 
         currentStrokePoints.current.push(coords);
@@ -267,7 +254,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
       const newlySelected = [];
 
       currentStrokes.forEach((stroke, sIdx) => {
-        // Logic: If any point of the stroke is inside the rectangle, select it
         const isInside = stroke.points.some(p => 
           p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY
         );
@@ -297,7 +283,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
     setIsPanning(false);
   };
 
-  // Helper for reused hit logic
   const pageStrokesHitTest = (coords) => {
     const pageStrokes = pages[currentPageIndex] || [];
     let hitIndex = -1;
@@ -361,10 +346,8 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
       const currentStrokes = newPages[currentPageIndex];
 
       if (currentStrokes && currentStrokes.length > 0) {
-        // Remove the very last stroke added to the current page
         newPages[currentPageIndex] = currentStrokes.slice(0, -1);
 
-        // Sync the update to all students
         socket?.emit('transmit-action', { 
           classId, 
           action: 'updateStrokes', 
@@ -406,7 +389,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
   });
 
   socket.on('receive-stroke', (s) => {
-    // 1. Instant Draw: Draw to canvas immediately for smooth real-time viewing
     if (s.pageIndex === currentIndexRef.current) {
       const ctx = canvasRef.current?.getContext('2d');
       if (ctx) {
@@ -420,11 +402,9 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
       }
     }
 
-    // 2. Persist to State: Save the points so they stay when switching pages
     if (isStudent) {
       setPages(prev => {
         const newPages = [...prev];
-        // Ensure the page exists in the array
         if (!newPages[s.pageIndex]) {
           while (newPages.length <= s.pageIndex) newPages.push([]);
         }
@@ -432,8 +412,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
         const currentStrokes = newPages[s.pageIndex];
         const lastStroke = currentStrokes[currentStrokes.length - 1];
 
-        // LOGIC: If this segment connects to the previous one, append it.
-        // Otherwise, it's a new "pen down" event from the teacher.
         if (lastStroke && 
             lastStroke.color === s.color && 
             lastStroke.points[lastStroke.points.length - 1].x === s.prevX &&
@@ -457,12 +435,10 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
         if (n[act.pageIndex]) n[act.pageIndex] = []; 
         return n; 
       });
-      // Clear canvas if student is currently on that page
       if (act.pageIndex === currentIndexRef.current) {
         canvasRef.current?.getContext('2d')?.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
       }
     } else if (act.action === 'newPage') {
-      // FIX: Ensure pages array is long enough to reach act.pageIndex
       setPages(prev => {
         const n = [...prev];
         while (n.length <= act.pageIndex) n.push([]);
@@ -519,23 +495,19 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
     );
 
     // --- 2. CENTER CALIBRATION ---
-    // This anchors the IMU "zero" to the current ArUco position (cvPos)
     if (centerPos.current === null) { 
         centerPos.current = { yaw, pitch }; 
-        prevCoords.current = { x: cvPos.x, y: cvPos.y }; // Initialize prevCoords to prevent jumps
+        prevCoords.current = { x: cvPos.x, y: cvPos.y };
         return; 
     }
     
-    // --- 3. DYNAMIC SENSITIVITY & COORDINATE CALCULATION ---
-    // dynamicSens maps angular tilt to canvas pixels. 
+    // --- 3. DYNAMIC SENSITIVITY & COORDINATE CALCULATION --- 
     const dynamicSens = 150 + (Math.abs(data.j) * 80); 
     
-    // The core fix: target = (Physical Marker Position) - (Angular Offset)
     const targetX = cvPos.x - (yaw - centerPos.current.yaw) * dynamicSens;
     const targetY = cvPos.y - (pitch - centerPos.current.pitch) * dynamicSens;
 
     // --- 4. SMOOTHING & CLAMPING ---
-    // Apply smoothing to the raw target to filter out IMU jitter
     let x = prevCoords.current 
         ? prevCoords.current.x + (targetX - prevCoords.current.x) * SMOOTHING 
         : targetX;
@@ -543,7 +515,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
         ? prevCoords.current.y + (targetY - prevCoords.current.y) * SMOOTHING 
         : targetY;
 
-    // Strict clamping to the logical board dimensions (2440x1170)
     x = Math.max(0, Math.min(x, BOARD_WIDTH));
     y = Math.max(0, Math.min(y, BOARD_HEIGHT));
 
@@ -551,7 +522,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
     if (data.down) {
         currentStrokePoints.current.push({ x, y });
         
-        // Only draw if we have a valid previous point and it's not the first point of a stroke
         if (prevCoords.current && currentStrokePoints.current.length > 1) {
             ctx.beginPath();
             ctx.lineWidth = 4;
@@ -573,7 +543,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
             });
         }
     } else {
-        // Finalize stroke when pen is lifted
         if (currentStrokePoints.current.length > 0) {
             const newStroke = { points: [...currentStrokePoints.current], color: selectedColor };
             setPages(prev => {
@@ -596,14 +565,12 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
         }
     }
     
-    // Always update prevCoords for the next frame
     prevCoords.current = { x, y };
 
     // --- 6. CURSOR RENDERING ---
     cCtx.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
     cCtx.beginPath();
     cCtx.arc(x, y, 6, 0, Math.PI * 2);
-    // Use orange for hovering, selectedColor for active writing
     cCtx.fillStyle = data.down ? selectedColor : '#FF8040';
     cCtx.fill();
     cCtx.strokeStyle = 'white';
@@ -695,15 +662,13 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
         const service = await server.getPrimaryService(SERVICE_UUID);
         const char = await service.getCharacteristic(CHARACTERISTIC_UUID);
 
-        // --- CLEANUP STEP: Prevent Stuck Listeners ---
-        // We remove the named function 'handleBLEData' before adding it again
         char.removeEventListener('characteristicvaluechanged', handleBLEData);
         
         await char.startNotifications();
         char.addEventListener('characteristicvaluechanged', handleBLEData);
 
         // --- RESET SYSTEM STATE ---
-        centerPos.current = null; // Force IMU to sync to Camera position
+        centerPos.current = null;
         setIsConnected(true);
         bleDevice.current = device;
         
@@ -778,7 +743,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
 
   return (
     <div className="flex flex-col lg:flex-row h-screen w-screen bg-slate-100 overflow-hidden font-['Poppins'] select-none">
-      {/* Custom Scrollbar Global Style */}
       <style>{`
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -788,7 +752,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
 
       {!isStudent && (
         <aside className="w-full lg:w-[260px] bg-white flex flex-col border-r border-slate-200 z-50 shadow-xl h-auto lg:h-full overflow-hidden shrink-0">
-          {/* Navigation & Page Controls */}
           <div className="p-3 bg-white border-b border-slate-100 z-20 shadow-sm">
             <div className="flex flex-row lg:flex-col gap-3 lg:gap-2 items-center lg:items-stretch">
                 <div className="flex items-center justify-between flex-1 lg:flex-none">
@@ -823,11 +786,9 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
             </div>
           </div>
 
-          {/* Tools Scroll Area */}
           <div className="flex-1 overflow-y-auto p-3 lg:p-4 pb-6 lg:pb-10 custom-scroll">
             <div className="flex flex-col gap-2">
                 
-                {/* Connectivity Section */}
                 <div className="space-y-1.5">
                     {!navigator.bluetooth && (
                         <div className="p-2 bg-red-50 rounded-lg border border-red-100 mb-1">
@@ -840,7 +801,6 @@ export default function SmartStrokeDashboard({ classId, onSaveSuccess, role = 't
                     <button onClick={() => { centerPos.current = null; triggerToast("Sensor Centered"); }} className="w-full p-2.5 rounded-xl bg-blue-50 text-[#001BB7] font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all">Recenter</button>
                 </div>
 
-                {/* PALETTE AND TILT VIZ - SIDE BY SIDE ON TABLET, STACKED ON PC */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-2">
                     {/* Palette Container */}
                     <div className="bg-white p-2 rounded-2xl border border-slate-100 flex flex-col items-center justify-center min-h-[80px]">

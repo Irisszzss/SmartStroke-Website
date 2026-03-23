@@ -67,7 +67,6 @@ const AdminPage = ({ triggerToast }) => {
 
     return (
         <div className="max-w-4xl mx-auto w-full px-4 py-6 font-['Poppins']">
-            {/* Scrollbar CSS */}
             <style>{`
                 .custom-scroll::-webkit-scrollbar { width: 5px; }
                 .custom-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -120,7 +119,6 @@ const AdminPage = ({ triggerToast }) => {
                 </div>
             </div>
 
-            {/* List Container with Scroll */}
             <div className="bg-white rounded-3xl shadow-xl border border-slate-50 overflow-hidden relative">
                 <div className="bg-slate-50/50 px-6 py-3 border-b border-slate-100 flex justify-between">
                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Applicant Details</span>

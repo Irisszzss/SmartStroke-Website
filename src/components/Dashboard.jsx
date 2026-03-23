@@ -27,7 +27,7 @@ export default function Dashboard({ user, onSelectClass, triggerToast }) {
 
   const closeModal = () => {
     setModalOpen(false);
-    setInputValue(''); // Clears input so it's not there when you re-open
+    setInputValue('');
   };
 
   const handleAction = async () => {
@@ -66,14 +66,12 @@ export default function Dashboard({ user, onSelectClass, triggerToast }) {
         }
       `}</style>
 
-      {/* Branded Energy Orbs */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-10%] right-[-5%] w-[400px] h-[400px] bg-[#FF8040] opacity-[0.05] blur-[100px] rounded-full animate-pulse" />
         <div className="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-[#001BB7] opacity-[0.05] blur-[100px] rounded-full animate-pulse" />
       </div>
 
       <div className="relative z-10 max-w-6xl mx-auto">
-        {/* Compact Header */}
         <div className="flex flex-col sm:flex-row justify-between items-end gap-4 mb-10">
           <div className="animate-in slide-in-from-left-6 duration-700">
             <div className="flex items-center gap-2 mb-2">
@@ -93,7 +91,6 @@ export default function Dashboard({ user, onSelectClass, triggerToast }) {
           </button>
         </div>
 
-        {/* Compact Classes Display */}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[1,2,3,4].map(i => <div key={i} className="h-48 bg-white/40 border border-slate-100 animate-pulse rounded-[32px]" />)}
@@ -138,7 +135,6 @@ export default function Dashboard({ user, onSelectClass, triggerToast }) {
         )}
       </div>
 
-      {/* COMPACT MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-300">
           <div className="bg-white p-8 rounded-[32px] w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden">

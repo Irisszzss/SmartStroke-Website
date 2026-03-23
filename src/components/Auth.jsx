@@ -22,7 +22,6 @@ export default function Auth({ onLogin }) {
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Dynamic theme logic
   const isTeacher = formData.role === 'teacher';
   const themeColor = isTeacher ? '#FF8040' : '#001BB7';
   const themeBg = isTeacher ? 'bg-[#FF8040]' : 'bg-[#001BB7]';
@@ -125,10 +124,8 @@ export default function Auth({ onLogin }) {
       <div className="relative z-10 flex flex-col items-center w-full max-w-md px-4 py-12 flex-shrink-0">
         <div className="mb-6 text-center animate-in fade-in slide-in-from-top-8 duration-1000">
           <div className="relative inline-block">
-            {/* Glow effect alternating on login, static on signup */}
             <div className={`absolute -inset-3 rounded-[28px] opacity-20 blur-lg animate-pulse transition-colors duration-500 ${isLogin ? 'animate-alternate-glow' : (isTeacher ? 'bg-[#FF8040]' : 'bg-[#001BB7]')}`} />
             
-            {/* Square background alternating on login, static on signup */}
             <div className={`relative w-14 h-14 rounded-[20px] flex items-center justify-center mx-auto mb-3 shadow-xl transition-colors duration-500 ${isLogin ? 'animate-alternate-theme' : themeBg}`}>
               <img 
                 src={SSLogo} 
@@ -234,7 +231,6 @@ export default function Auth({ onLogin }) {
         </div>
       </div>
 
-      {/* THEMED MODALS */}
       {(showSuccessModal || showApprovalModal) && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md">
           <div className="relative bg-white p-6 rounded-[32px] shadow-2xl w-full max-w-xs text-center border border-white">
